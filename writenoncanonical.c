@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <signal.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -14,33 +15,48 @@
 
 enum state{START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP};
 
-struct termios newtio;
+struct termios oldtio, newtio;
 
-void stateMachineUA(enum state* currentState, char * byte){
-    switch(*state){
+#define MAX_TRIES 3
+
+int numTries = 0;
+
+void stateMachineUA(enum state* currentState, char byte){
+    switch(*currentState){
         case START:
             if(byte == 0x7e)     //flag
-                *state = FLAG_RCV;
+                *currentState = FLAG_RCV;
             break;
         case FLAG_RCV:
             if(byte == 0x03)   //acknowlegement
-                *state = A_RCV;
+                *currentState = A_RCV;
             else if(byte != 0x7e)
-                *state = START;
+                *currentState = START;
             break;
         case A_RCV:
             if(byte == 0x07)
-                *state = C_RCV;
+                *currentState = C_RCV;
             else if(byte == 0x7e){
-                *state = FLAG_RCV;
+                *currentState = FLAG_RCV;
             }
             else{
-                *state = START;
+                *currentState = START;
             }
             break;
         case C_RCV:
+            if(byte == (0x03^0x07))
+              *currentState = BCC_OK;
+            else if(byte == 0x7e)
+              *currentState = FLAG_RCV;
+            else
+              *currentState = START;
+            
             break;
         case BCC_OK:
+            if(byte == 0x7e)
+              *currentState = FLAG_RCV;
+            else
+              *currentState = START;
             break;
         case STOP:
             break;
@@ -49,16 +65,47 @@ void stateMachineUA(enum state* currentState, char * byte){
 
 int readUA(int fd){
     char byte;
-    while(){
-        read(fd,&byte,1);
+    enum state state = START;
+    while(state != STOP){
+        if(read(fd,&byte,1) < 1){
+          perror("Error reading byte!");
+        }
+        stateMachineUA(&state,byte);
     }
+}
+
+void sigAlarmHandler(){
+  printf("Alarm!");
+  numTries++;
+}
+
+void initializeAlarm(){
+  struct sigaction sa;
+	sa.sa_handler = &sigAlarmHandler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	sigaction(SIGALRM, &sa, NULL);
+
+  alarm(3); // need to define a macro for the time of the alarm
+
+}
+
+void disableAlarm(){
+  struct sigaction sa;
+	sa.sa_handler = NULL;
+
+  sigaction(SIGALRM, &sa, NULL);
+
+  alarm(0);
 }
 
 
 int llOpen(char *port,int flag){
 
+    int fd;
     fd = open(port, O_RDWR | O_NOCTTY );
-    if (fd <0) {perror(argv[1]); exit(-1); }
+    if (fd <0) {perror(port); exit(-1); }
 
     if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
         perror("tcgetattr");
@@ -86,15 +133,22 @@ int llOpen(char *port,int flag){
     printf("New termios structure set\n");
 
     do{
-       send(Set);    //TO DO
+       write(fd,0x03,sizeof(0x03));    
        alarm();
        readUA(fd);
-    } while();
+    } while(numTries < MAX_TRIES);
+
+    disableAlarm();
+
+    if(numTries >= MAX_TRIES){
+      printf("Exceed number of maximum tries!");
+      return -1;
+    }
 
     return fd;
 }
 
-volatile int STOP=FALSE;
+//volatile int STOP=FALSE;
 
 int main(int argc, char** argv)
 {
