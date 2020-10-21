@@ -63,26 +63,32 @@ void readReceiverResponse(int fd){
   char byte;
   enum state state = START;
   char controlByte;
+  int teste = 0;
   while(state != STOP && info.alarmFlag == 0){
       if(read(fd,&byte,1) < 0){
         perror("Error reading byte!");
       }
       printf("%c", byte);
       responseStateMachine(&state,byte,&controlByte);
+      teste++;
   }
+  printf("%d\n",teste);
 }
 
 void readTransmitterResponse(int fd){
   char byte;
   enum state state = START;
   char controlByte;
+  int teste = 0;
   while(state != STOP){
     if(read(fd,&byte,1) < 0){
       perror("Error reading byte!");
     }
     printf("%c", byte);
     responseStateMachine(&state,byte,&controlByte);
+    teste++;
   }
+  printf("%d\n",teste);
 }
 
 
@@ -159,6 +165,29 @@ int llopen(char *port,int flag){
     return fd;
 }
 
+int processControlByte(int fd, char *controlByte){
+    char byte;
+    enum state state = START;
+    while(state != STOP){
+        if(read(fd,&byte,1) < 1){
+          perror("Error reading byte!");
+        }
+        responseStateMachine(&state,byte,controlByte);
+    }
+    if(*controlByte == 0x05){
+      return 0;
+    }
+    else if(*controlByte == 0x85){
+      return 0;
+    }
+    else if(*controlByte == 0x01){
+      return -1;
+    }
+    else if(*controlByte == 0x81){
+      return -1;
+    }
+}
+
 
 int llwrite(int fd, char* buffer, int length){
     int charactersWritten = 0;
@@ -220,7 +249,6 @@ int llwrite(int fd, char* buffer, int length){
         disableAlarm();
         info.alarmFlag = 1;
       }
-
 
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
     
@@ -314,15 +342,131 @@ int readTransmitterFrame(int fd, char * buffer){
     return lenght;
 }
 
-int llread(int fd,char* buffer){
-  int received = 0;
+int verifyFrame(char* frame,int length){
+  char addressField = frame[1];
+  char controlByte = frame[2];
+  char bcc1 = frame[3];
+  char bcc2 = frame[length-2];
+  char aux = 0x00;
 
-
-  while(received == 0){
+  //verify if the bcc1 is correct
+  if(controlByte != 0x00 && controlByte != 0x40){
+    printf("Error in control byte!\n");
+    return -1;
+  }
+  else if(bcc1 == (addressField^controlByte)){
+    //check bcc2
+    for (size_t i = 4; i < length-2; i++)
+    {
+      aux^=frame[i];
+    }
+    if(bcc2 != aux){
+      printf("Error in bcc2!\n");
+      return -2;
+    }
   }
 
+  return 0;
 }
 
+int llread(int fd,char* buffer){
+  int received = 0;
+  int length = 0;
+  char controlByte;
+  char auxBuffer[2500];
+  int buffIndex = 0;
+  while(received == 0){
+    length = readTransmitterFrame(fd,auxBuffer);
+
+    if(length > 0){
+      char originalFrame[2*length+6];
+      //destuffing
+      originalFrame[0] = auxBuffer[0];
+      originalFrame[1] = auxBuffer[1];
+      originalFrame[2] = auxBuffer[2];
+      originalFrame[3] = auxBuffer[3];
+      int originalFrameIndex = 4;
+      int escapeByteFound = 0;
+
+      for (size_t i = 4; i < length-1; i++)
+      {
+        if(auxBuffer[i] == 0x7D){
+          escapeByteFound = 1;
+          continue;
+        }
+        else if(auxBuffer[i] == (0x7E^0x20) && escapeByteFound == 1){
+          originalFrame[originalFrameIndex] = auxBuffer[i];
+          originalFrameIndex++;
+          escapeByteFound = 0;
+        }
+        else if(auxBuffer[i] == (0x7D^0x20) && escapeByteFound == 1){
+          originalFrame[originalFrameIndex] = auxBuffer[i];
+          originalFrameIndex++;
+          escapeByteFound = 0;
+        }
+        else{
+          originalFrame[originalFrameIndex] = auxBuffer[i];
+          originalFrameIndex++;
+        }
+      }
+      originalFrame[originalFrameIndex] = auxBuffer[length-1];
+      controlByte = originalFrame[2];
+
+      if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
+        if(controlByte == 0x00){
+          char frameToSend[5];
+          frameToSend[0] = 0x7E;
+          frameToSend[1] = 0x03;
+          frameToSend[2] = 0x01;
+          frameToSend[3] = frameToSend[1] ^ frameToSend[2];
+          frameToSend[4] = 0x7E;
+
+          write(fd,frameToSend,5);
+        }
+        else if(controlByte == 0x40){
+          char frameToSend[5];
+          frameToSend[0] = 0x7E;
+          frameToSend[1] = 0x03;
+          frameToSend[2] = 0x81;
+          frameToSend[3] = frameToSend[1] ^ frameToSend[2];
+          frameToSend[4] = 0x7E;
+
+          write(fd,frameToSend,5);
+        }
+        return 0;
+      }
+      else{
+        for (size_t i = 4; i < originalFrameIndex-1; i++)
+        {
+          buffer[buffIndex] = originalFrame[i];
+          buffIndex++;
+        }
+        if(controlByte == 0x00){
+          char frameToSend[5];
+          frameToSend[0] = 0x7E;
+          frameToSend[1] = 0x03;
+          frameToSend[2] = 0x85;
+          frameToSend[3] = frameToSend[1] ^ frameToSend[2];
+          frameToSend[4] = 0x7E;
+
+          write(fd,frameToSend,5);
+        }
+        else if(controlByte == 0x40){
+          char frameToSend[5];
+          frameToSend[0] = 0x7E;
+          frameToSend[1] = 0x03;
+          frameToSend[2] = 0x05;
+          frameToSend[3] = frameToSend[1] ^ frameToSend[2];
+          frameToSend[4] = 0x7E;
+
+          write(fd,frameToSend,5);
+        }
+        received = 1;
+      }
+    }
+  }
+  return buffIndex;
+}
 
 int llclose(int fd, int flag){
     //Last frames' transmission
