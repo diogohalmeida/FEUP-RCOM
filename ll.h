@@ -58,7 +58,7 @@ int infoSetup();
 int verifyControlByte(char byte);
 void responseStateMachine(enum state* currentState, char byte, char* controlByte);
 void informationFrameStateMachine(enum state* currentState, char byte, char* controlByte);
-
+int processControlByte(int fd, char *controlByte);
 
 //Transmitter
 void readReceiverResponse(int fd);
@@ -73,4 +73,4 @@ int readTransmitterFrame(int fd, char * buffer);
 int llopen(char* port, int flag);
 int llwrite(int fd, char* packet, int length);
 int llread(int fd, char* buf);
-//int llclose(int fd, int role);
+int llclose(int fd, int flag);

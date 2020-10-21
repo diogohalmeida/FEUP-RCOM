@@ -14,18 +14,11 @@ int main(int argc, char** argv)
       exit(1);
     }
 
-    fd = llopen(argv[1],RECEIVER);
+    fd = llopen(argv[1], TRANSMITTER);
 
+    printf("ll open done\n");
+    
+    //llclose(fd, TRANSMITTER);
 
-   
-    if ( tcsetattr(fd,TCSANOW,&info.oldtio) == -1) {
-      perror("tcsetattr");
-      exit(-1);
-    }
-
-
-
-
-    close(fd);
     return 0;
 }

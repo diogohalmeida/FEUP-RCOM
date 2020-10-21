@@ -67,6 +67,7 @@ void readReceiverResponse(int fd){
       if(read(fd,&byte,1) < 0){
         perror("Error reading byte!");
       }
+      printf("%c", byte);
       responseStateMachine(&state,byte,&controlByte);
   }
 }
@@ -79,13 +80,14 @@ void readTransmitterResponse(int fd){
     if(read(fd,&byte,1) < 0){
       perror("Error reading byte!");
     }
+    printf("%c", byte);
     responseStateMachine(&state,byte,&controlByte);
   }
 }
 
 
 int llopen(char *port,int flag){
-
+    //Open the connection
     int fd;
     fd = open(port, O_RDWR | O_NOCTTY );
     if (fd <0) {perror(port); exit(-1); }
@@ -115,6 +117,7 @@ int llopen(char *port,int flag){
 
     printf("New termios structure set\n");
 
+    //First frames' transmission
     if(flag == TRANSMITTER){
       char controlFrame[5];
       controlFrame[0] = 0x7E;
@@ -132,7 +135,7 @@ int llopen(char *port,int flag){
       disableAlarm();
 
       if(info.numTries >= MAX_TRIES){
-        printf("Exceed number of maximum tries!\n");
+        printf("Exceeded number of maximum tries!\n");
         return -1;
       }
     }
@@ -148,11 +151,16 @@ int llopen(char *port,int flag){
       write(fd,controlFrame,5);  //send UA
     }
 
+    else{
+        printf("Unknown function, must be a TRANSMITTER/RECEIVER\n");
+        return 1;
+    }
+
     return fd;
 }
 
 
-int llWrite(int fd, char* buffer, int length){
+int llwrite(int fd, char* buffer, int length){
     int charactersWritten = 0;
     char controlByte;
     if(info.ns == 1)
@@ -218,7 +226,30 @@ int llWrite(int fd, char* buffer, int length){
     
     disableAlarm();
 
-    return charactersWritten;   
+    return charactersWritten; 
+}
+
+int processControlByte(int fd, char *controlByte){
+    char byte;
+    enum state state = START;
+    while(state != STOP){
+        if(read(fd,&byte,1) < 1){
+          perror("Error reading byte!");
+        }
+        responseStateMachine(&state,byte,controlByte);
+    }
+    if(*controlByte == 0x05){
+      return 0;
+    }
+    else if(*controlByte == 0x85){
+      return 0;
+    }
+    else if(*controlByte == 0x01){
+      return -1;
+    }
+    else if(*controlByte == 0x81){
+      return -1;
+    }
 }
 
 void informationFrameStateMachine(enum state* currentState, char byte, char* controlByte){
@@ -288,10 +319,74 @@ int llread(int fd,char* buffer){
 
 
   while(received == 0){
-
-
-
-
   }
 
+}
+
+
+int llclose(int fd, int flag){
+    //Last frames' transmission
+    if(flag == TRANSMITTER){
+        char controlFrameDISC[5];
+        controlFrameDISC[0] = FLAG;
+        controlFrameDISC[1] = A_CMD;
+        controlFrameDISC[2] = C_DISC;
+        controlFrameDISC[3] = controlFrameDISC[1] ^ controlFrameDISC[2];
+        controlFrameDISC[4] = FLAG;
+
+        do{
+            write(fd,controlFrameDISC,5);  //write DISC 
+            info.alarmFlag = 0;
+            initializeAlarm();
+            readReceiverResponse(fd);  //read DISC
+        } while(info.numTries < MAX_TRIES && info.alarmFlag);
+        
+        disableAlarm();
+
+        if(info.numTries >= MAX_TRIES){
+            printf("Exceeded number of maximum tries!\n");
+            return -1;
+        }
+        else{
+            char controlFrameUA[5];
+            controlFrameUA[0] = FLAG;
+            controlFrameUA[1] = A_CMD;
+            controlFrameUA[2] = C_UA;
+            controlFrameUA[3] = controlFrameUA[1] ^ controlFrameDISC[2];
+            controlFrameUA[4] = FLAG;
+
+            write(fd,controlFrameUA,5); //write UA after receiving DISC
+            sleep(1);
+        }
+    }
+
+    else if(flag == RECEIVER){
+        readTransmitterResponse(fd);
+        char controlFrame[5];
+        controlFrame[0] = FLAG;
+        controlFrame[1] = A_CMD;
+        controlFrame[2] = C_DISC;
+        controlFrame[3] = controlFrame[1] ^ controlFrame[2];
+        controlFrame[4] = FLAG;
+        write(fd,controlFrame,5);  //send DISC
+
+        readTransmitterResponse(fd);
+    }
+
+    else{
+        printf("Unknown function, must be a TRANSMITTER/RECEIVER\n");
+        return 1;
+    }
+    //Close the connection
+
+    tcflush(fd, TCIOFLUSH);
+
+	if (tcsetattr(fd, TCSANOW, &info.oldtio) == -1) {
+		perror("tcsetattr");
+		exit(-1);
+	}
+
+	close(fd);
+
+    return 0;
 }
