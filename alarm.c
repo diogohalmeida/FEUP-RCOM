@@ -1,7 +1,5 @@
 #include "alarm.h"
 
-
-
 void sigAlarmHandler(){
   printf("Alarm!\n");
   info.alarmFlag = 1;
@@ -9,7 +7,7 @@ void sigAlarmHandler(){
 }
 
 void initializeAlarm(){
-    struct sigaction sa;
+  struct sigaction sa;
 	sa.sa_handler = &sigAlarmHandler;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
