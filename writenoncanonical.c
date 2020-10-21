@@ -13,6 +13,9 @@
 #define FALSE 0
 #define TRUE 1
 
+#define TRANSMITTER 0
+#define RECEIVER 1
+
 enum state{START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP};
 
 struct termios oldtio, newtio;
@@ -21,22 +24,31 @@ struct termios oldtio, newtio;
 
 int numTries = 0;
 
-void stateMachineUA(enum state* currentState, char byte){
+int timerFlag = 0;
+
+int verifyControlByte(char byte){
+  return byte == 0x03 || byte == 0x0b || byte == 0x07 || byte == 0x05 || byte == 0x85 || byte == 0x81 || byte == 0x01;
+}
+
+
+void responseStateMachine(enum state* currentState, char byte, char* controlByte){
     switch(*currentState){
         case START:
-            if(byte == 0x7e)     //flag
+            if(byte == 0x7E)     //flag
                 *currentState = FLAG_RCV;
             break;
         case FLAG_RCV:
             if(byte == 0x03)   //acknowlegement
                 *currentState = A_RCV;
-            else if(byte != 0x7e)
+            else if(byte != 0x7E)
                 *currentState = START;
             break;
         case A_RCV:
-            if(byte == 0x07)
-                *currentState = C_RCV;
-            else if(byte == 0x7e){
+            if(verifyControlByte(byte)){
+              *currentState = C_RCV;
+              *controlByte = byte;
+            }
+            else if(byte == 0x7E){
                 *currentState = FLAG_RCV;
             }
             else{
@@ -44,17 +56,17 @@ void stateMachineUA(enum state* currentState, char byte){
             }
             break;
         case C_RCV:
-            if(byte == (0x03^0x07))
+            if(byte == (0x03^(*controlByte)))
               *currentState = BCC_OK;
-            else if(byte == 0x7e)
+            else if(byte == 0x7E)
               *currentState = FLAG_RCV;
             else
               *currentState = START;
             
             break;
         case BCC_OK:
-            if(byte == 0x7e)
-              *currentState = FLAG_RCV;
+            if(byte == 0x7E)
+              *currentState = STOP;
             else
               *currentState = START;
             break;
@@ -63,19 +75,33 @@ void stateMachineUA(enum state* currentState, char byte){
     }
 }
 
-int readUA(int fd){
-    char byte;
-    enum state state = START;
-    while(state != STOP){
-        if(read(fd,&byte,1) < 1){
-          perror("Error reading byte!");
-        }
-        stateMachineUA(&state,byte);
+void readReceiverResponse(int fd){
+  char byte;
+  enum state state = START;
+  char controlByte;
+  while(state != STOP && timerFlag == 0){
+      if(read(fd,&byte,1) < 0){
+        perror("Error reading byte!");
+      }
+      responseStateMachine(&state,byte,&controlByte);
+  }
+}
+
+void readTransmitterResponse(int fd){
+  char byte;
+  enum state state = START;
+  char controlByte;
+  while(state != STOP){
+    if(read(fd,&byte,1) < 0){
+      perror("Error reading byte!");
     }
+    responseStateMachine(&state,byte,&controlByte);
+  }
 }
 
 void sigAlarmHandler(){
-  printf("Alarm!");
+  printf("Alarm!\n");
+  timerFlag = 1;
   numTries++;
 }
 
@@ -107,7 +133,7 @@ int llOpen(char *port,int flag){
     fd = open(port, O_RDWR | O_NOCTTY );
     if (fd <0) {perror(port); exit(-1); }
 
-    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+    if (tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
         perror("tcgetattr");
         exit(-1);
     }
@@ -120,35 +146,189 @@ int llOpen(char *port,int flag){
     /* set input mode (non-canonical, no echo,...) */
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VTIME] = 0;   /* inter-character timer unused */
+    newtio.c_cc[VMIN] = 1;   /* blocking read until 5 chars received */
 
     tcflush(fd, TCIOFLUSH);
 
-    if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
+    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
         perror("tcsetattr");
         exit(-1);
     }
 
     printf("New termios structure set\n");
 
-    do{
-       write(fd,0x03,sizeof(0x03));    
-       alarm();
-       readUA(fd);
-    } while(numTries < MAX_TRIES);
+    if(flag == TRANSMITTER){
+      char controlFrame[5];
+      controlFrame[0] = 0x7E;
+      controlFrame[1] = 0x03;
+      controlFrame[2] = 0x03;
+      controlFrame[3] = controlFrame[1] ^ controlFrame[2];
+      controlFrame[4] = 0x7E;
+      do{
+       write(fd,controlFrame,5);  //write SET   
+       timerFlag = 0;
+       initializeAlarm();
+       readReceiverResponse(fd);                    //read UA
+      } while(numTries < MAX_TRIES && timerFlag);
 
-    disableAlarm();
+      disableAlarm();
 
-    if(numTries >= MAX_TRIES){
-      printf("Exceed number of maximum tries!");
-      return -1;
+      if(numTries >= MAX_TRIES){
+        printf("Exceed number of maximum tries!\n");
+        return -1;
+      }
+    }
+
+    else if(flag == RECEIVER){
+      readTransmitterResponse(fd);
+      char controlFrame[5];
+      controlFrame[0] = 0x7E;
+      controlFrame[1] = 0x03;
+      controlFrame[2] = 0x07;
+      controlFrame[3] = controlFrame[1] ^ controlFrame[2];
+      controlFrame[4] = 0x7E;
+      write(fd,controlFrame,5);  //send UA
     }
 
     return fd;
 }
 
+
+/*void stateMachineResponse(enum state* currentState, char byte, char* controlByte){
+    switch(*currentState){
+        case START:
+            if(byte == 0x7E)     //flag
+                *currentState = FLAG_RCV;
+            break;
+        case FLAG_RCV:
+            if(byte == 0x03)   //acknowlegement
+                *currentState = A_RCV;
+            else if(byte != 0x7E)
+                *currentState = START;
+            break;
+        case A_RCV:
+            if(verifyControlByte(byte)){
+              *currentState = C_RCV;
+              *controlByte = byte;
+            }
+            else if(byte == 0x7E){
+                *currentState = FLAG_RCV;
+            }
+            else{
+                *currentState = START;
+            }
+            break;
+        case C_RCV:
+            if(byte == (0x03^0x07))
+              *currentState = BCC_OK;
+            else if(byte == 0x7E)
+              *currentState = FLAG_RCV;
+            else
+              *currentState = START;
+            
+            break;
+        case BCC_OK:
+            if(byte == 0x7E)
+              *currentState = FLAG_RCV;
+            else
+              *currentState = START;
+            break;
+        case STOP:
+            break;
+    }
+}*/
+
+/*int processControlByte(int fd, char *controlByte){
+    char byte;
+    enum state state = START;
+    while(state != STOP){
+        if(read(fd,&byte,1) < 1){
+          perror("Error reading byte!");
+        }
+        stateMachineResponse(&state,byte,controlByte);
+    }
+    if(*controlByte == 0x05){
+      return 0;
+    }
+    else if(*controlByte == 0x85){
+      return 0;
+    }
+    else if(*controlByte == 0x01){
+      return -1;
+    }
+    else if(*controlByte == 0x81){
+      return -1;
+    }
+}*/
+
+/*int llWrite(int fd, char* buffer, int length){
+    int charactersWritten = 0;
+    char controlByte;
+    do{
+
+      //write frame
+      char frameToSend[2*length+6];
+      int frameIndex = 4, frameLength = 0;
+      char bcc2 = 0x00;
+
+      //Start to make the frame to be sent
+      frameToSend[0] = 0x7E;    //FLAG
+      frameToSend[1] = 0x03;    //A
+      if(ns == 0)
+        frameToSend[2] = 0x00;
+      else
+      {
+        frameToSend[2] = 0x40;
+      }
+      frameToSend[3] = frameToSend[1] ^ frameToSend[2]; 
+
+      for (size_t i = 0; i < length; i++){
+        bcc2 ^= buffer[i];
+        if(buffer[i] == 0x7E || buffer[i] == 0x7D){   //if the byte its equal to the flag or to the escape byte
+          frameToSend[frameIndex] = 0x7D;
+          frameIndex++;
+          frameToSend[frameIndex] = buffer[i] ^ 0x20;
+          frameIndex++;
+        }
+        else{
+          frameToSend[frameIndex] = buffer[i];
+          frameIndex++;
+        }
+      }
+
+      if(bcc2 == 0x7E || bcc2 == 0x7D){
+        frameToSend[frameIndex] = 0x7D;
+        frameIndex++;
+        frameToSend[frameIndex] = bcc2 ^ 0x20;
+      }
+      else{
+        frameToSend[frameIndex] = bcc2;
+        frameIndex++;
+      }
+
+      frameToSend[frameIndex] = 0x7E;
+
+      frameLength = frameIndex+1;
+
+      charactersWritten = write(fd,frameToSend,frameLength);
+
+      //read receiver response
+      if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
+
+      }
+
+
+    }while(numTries < MAX_TRIES);
+    
+    
+
+    return charactersWritten;
+    
+}*/
+
 //volatile int STOP=FALSE;
+
 
 int main(int argc, char** argv)
 {
@@ -171,10 +351,10 @@ int main(int argc, char** argv)
   */
 
 
-    fd = open(argv[1], O_RDWR | O_NOCTTY );
+    /*fd = open(argv[1], O_RDWR | O_NOCTTY );
     if (fd <0) {perror(argv[1]); exit(-1); }
 
-    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+    if ( tcgetattr(fd,&oldtio) == -1) { // save current port settings
       perror("tcgetattr");
       exit(-1);
     }
@@ -184,22 +364,22 @@ int main(int argc, char** argv)
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
-    /* set input mode (non-canonical, no echo,...) */
+    // set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VTIME]    = 0;   // inter-character timer unused 
+    newtio.c_cc[VMIN]     = 5;   // blocking read until 5 chars received 
 
 
 
-  /* 
+  /*
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
     leitura do(s) pr�ximo(s) caracter(es)
   */
 
 
 
-    tcflush(fd, TCIOFLUSH);
+    /*tcflush(fd, TCIOFLUSH);
 
     if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
       perror("tcsetattr");
@@ -214,18 +394,22 @@ int main(int argc, char** argv)
       buf[i] = 'a';
     }
     
-    /*testing*/
+    //testing
     buf[25] = '\n';
     
     res = write(fd,buf,255);   
-    printf("%d bytes written\n", res);
+    printf("%d bytes written\n", res);*/
  
 
   /* 
     O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
     o indicado no gui�o 
   */
+  
+  
 
+
+    fd = llOpen(argv[1],TRANSMITTER);
 
 
    
