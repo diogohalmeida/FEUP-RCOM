@@ -257,29 +257,6 @@ int llwrite(int fd, char* buffer, int length){
     return charactersWritten; 
 }
 
-int processControlByte(int fd, char *controlByte){
-    char byte;
-    enum state state = START;
-    while(state != STOP){
-        if(read(fd,&byte,1) < 1){
-          perror("Error reading byte!");
-        }
-        responseStateMachine(&state,byte,controlByte);
-    }
-    if(*controlByte == 0x05){
-      return 0;
-    }
-    else if(*controlByte == 0x85){
-      return 0;
-    }
-    else if(*controlByte == 0x01){
-      return -1;
-    }
-    else if(*controlByte == 0x81){
-      return -1;
-    }
-}
-
 void informationFrameStateMachine(enum state* currentState, char byte, char* controlByte){
     switch(*currentState){
         case START:
