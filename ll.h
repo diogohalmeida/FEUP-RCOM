@@ -58,6 +58,8 @@ int infoSetup();
 int verifyControlByte(char byte);
 void responseStateMachine(enum state* currentState, char byte, char* controlByte);
 void informationFrameStateMachine(enum state* currentState, char byte, char* controlByte);
+int verifyFrame(char* frame,int length);
+int processControlByte(int fd, char *controlByte);
 
 
 //Transmitter
