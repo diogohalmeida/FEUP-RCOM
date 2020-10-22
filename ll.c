@@ -12,47 +12,66 @@ int infoSetup(){
 
 
 int verifyControlByte(unsigned char byte){
-  return byte == 0x03 || byte == 0x0b || byte == 0x07 || byte == 0x05 || byte == 0x85 || byte == 0x81 || byte == 0x01;
+  return byte == 0x03 || byte == 0x0B || byte == 0x07 || byte == 0x05 || byte == 0x85 || byte == 0x81 || byte == 0x01;
 }
+
 
 void responseStateMachine(enum state* currentState, unsigned char byte, unsigned char* controlByte){
     switch(*currentState){
         case START:
-            if(byte == 0x7E)     //flag
+            if(byte == 0x7E){    //flag
                 *currentState = FLAG_RCV;
+                printf("GOING TO FLAG_RCV\n");
+            }
             break;
         case FLAG_RCV:
-            if(byte == 0x03)   //acknowlegement
+            if(byte == 0x03){   //acknowlegement
                 *currentState = A_RCV;
-            else if(byte != 0x7E)
-                *currentState = START;
+                printf("GOING TO A_RCV\n");
+            }
+            else if(byte != 0x7E){
+              *currentState = START;
+              printf("GOING TO START FROM FLAG_RCV\n");
+            }
             break;
         case A_RCV:
             if(verifyControlByte(byte)){
               *currentState = C_RCV;
               *controlByte = byte;
+              printf("GOING TO C_RCV\n");
             }
             else if(byte == 0x7E){
                 *currentState = FLAG_RCV;
+                printf("GOING TO FLAG_RCV FROM A_RCV\n");
             }
             else{
                 *currentState = START;
+                printf("GOING TO START FROM A_RCV\n");
             }
             break;
         case C_RCV:
-            if(byte == (0x03^(*controlByte)))
+            if(byte == (0x03^(*controlByte))){
               *currentState = BCC_OK;
-            else if(byte == 0x7E)
+              printf("GOING TO BCC_OK\n");
+            }        
+            else if(byte == 0x7E){
               *currentState = FLAG_RCV;
-            else
+              printf("GOING TO FLAG_RCV FROM C_RCV\n");
+            }    
+            else{
               *currentState = START;
-            
+              printf("GOING TO START FROM C_RCV\n");
+            }     
             break;
         case BCC_OK:
-            if(byte == 0x7E)
+            if(byte == 0x7E){
               *currentState = STOP;
-            else
+              printf("GOING TO STOP\n");
+            }
+            else{
               *currentState = START;
+              printf("GOING TO START FROM BCC_OK\n");
+            }
             break;
         case STOP:
             break;
@@ -465,11 +484,11 @@ int llclose(int fd, int flag){
             controlFrameUA[0] = FLAG;
             controlFrameUA[1] = A_CMD;
             controlFrameUA[2] = C_UA;
-            controlFrameUA[3] = controlFrameUA[1] ^ controlFrameDISC[2];
+            controlFrameUA[3] = controlFrameUA[1] ^ controlFrameUA[2];
             controlFrameUA[4] = FLAG;
 
             write(fd,controlFrameUA,5); //write UA after receiving DISC
-            sleep(1);
+            //sleep(1);
         }
     }
 
@@ -481,9 +500,11 @@ int llclose(int fd, int flag){
         controlFrame[2] = C_DISC;
         controlFrame[3] = controlFrame[1] ^ controlFrame[2];
         controlFrame[4] = FLAG;
+
         write(fd,controlFrame,5);  //send DISC
 
         readTransmitterResponse(fd);
+        
     }
 
     else{

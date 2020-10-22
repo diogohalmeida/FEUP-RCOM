@@ -21,7 +21,7 @@
 #define A_REP 0x01
 
 #define C_SET 	0x03
-#define C_DISC 	0x0b
+#define C_DISC 	0x0B
 #define C_UA 	0x07
 #define C_RR0	0x05
 #define C_RR1	0x85

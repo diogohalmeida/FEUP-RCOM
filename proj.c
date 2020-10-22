@@ -7,16 +7,16 @@ int main(int argc, char** argv)
     char buf[255];
     int i, sum = 0, speed = 0;
     
-    if ( (argc < 3) || 
+    if ( (argc < 3) /*|| 
   	     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
-  	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
+  	      (strcmp("/dev/ttyS1", argv[1])!=0) )*/) {
       printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
       exit(1);
     }
 
     int flag;
-    char teste[3] = "ola";
-    char final[3] = {0};
+    char teste[15] = "isto e um teste";
+    char final[15] = {0};
 
     if(strcmp("1",argv[2]) == 0){
       flag = RECEIVER;
@@ -37,15 +37,10 @@ int main(int argc, char** argv)
       printf("%s\n",final);
     }
     else if(flag == TRANSMITTER){
-      llwrite(fd,teste,4);
+      llwrite(fd,teste,15);
     }
 
-   
-    if (tcsetattr(fd,TCSANOW,&info.oldtio) == -1) {
-      perror("tcsetattr");
-      exit(-1);
-    }
+    llclose(fd,flag);
 
-    close(fd);
     return 0;
 }
