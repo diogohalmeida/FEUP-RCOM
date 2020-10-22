@@ -4,7 +4,7 @@
 ConnectionInfo info;
 
 
-int infoSetup(){
+void infoSetup(){
     info.alarmFlag = 0;
     info.numTries = 0;
     info.ns = 0;
@@ -75,6 +75,8 @@ void responseStateMachine(enum state* currentState, unsigned char byte, unsigned
             break;
         case STOP:
             break;
+        default:
+            break;
     }
 }
 
@@ -103,7 +105,7 @@ void readTransmitterResponse(int fd){
 }
 
 
-int llopen(unsigned char *port,int flag){
+int llopen(char *port,int flag){
     //Open the connection
     int fd;
     fd = open(port, O_RDWR | O_NOCTTY );
@@ -132,6 +134,7 @@ int llopen(unsigned char *port,int flag){
         exit(-1);
     }
 
+    infoSetup();
     printf("New termios structure set\n");
 
     //First frames' transmission
@@ -197,10 +200,12 @@ int processControlByte(int fd, unsigned char *controlByte){
     else if(*controlByte == 0x81){
       return -1;
     }
+
+    return 0;
 }
 
 
-int llwrite(int fd, unsigned char* buffer, int length){
+int llwrite(int fd, char* buffer, int length){
     int unsigned charactersWritten = 0;
     unsigned char controlByte;
     if(info.ns == 1)
@@ -250,7 +255,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
 
       frameLength = frameIndex+1;
 
-      unsigned charactersWritten = write(fd,frameToSend,frameLength);
+      charactersWritten = write(fd,frameToSend,frameLength);
 
       info.alarmFlag = 0;
       initializeAlarm();
@@ -357,7 +362,7 @@ int verifyFrame(unsigned char* frame,int length){
   return 0;
 }
 
-int llread(int fd,unsigned char* buffer){
+int llread(int fd,char* buffer){
   int received = 0;
   int length = 0;
   unsigned char controlByte;
@@ -488,7 +493,7 @@ int llclose(int fd, int flag){
             controlFrameUA[4] = FLAG;
 
             write(fd,controlFrameUA,5); //write UA after receiving DISC
-            //sleep(1);
+            sleep(1);
         }
     }
 
