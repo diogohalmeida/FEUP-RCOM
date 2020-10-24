@@ -1,8 +1,8 @@
-#include "ll.h"
+#include "aplication.h"
 
 int main(int argc, char** argv)
 {
-    if ( (argc < 3) || 
+    /*if ( (argc < 3) || 
     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
     (strcmp("/dev/ttyS1", argv[1])!=0) && 
     (strcmp("/dev/ttyS10", argv[1])!=0) &&  
@@ -38,7 +38,11 @@ int main(int argc, char** argv)
       llwrite(fd,teste,3);
     }
 
-    llclose(fd,flag);
+    llclose(fd,flag);*/
+
+    char name[11] = "pinguim.gif";
+
+    readFileInformation(name);
 
     return 0;
 }
