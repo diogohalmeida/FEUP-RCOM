@@ -25,6 +25,6 @@ int readTransmitterFrame(int fd, unsigned char * buffer);
 
 // ll functions
 int llopen(char* port, int flag);
-int llwrite(int fd, char* packet, int length);
-int llread(int fd, char* buf);
+int llwrite(int fd, unsigned char* packet, int length);
+int llread(int fd, unsigned char* buf);
 int llclose(int fd, int flag);

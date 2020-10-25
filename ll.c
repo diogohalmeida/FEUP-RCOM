@@ -188,6 +188,7 @@ int processControlByte(int fd, unsigned char *controlByte){
         }
         responseStateMachine(&state,byte,controlByte);
     }
+
     if(*controlByte == 0x05){
       return 0;
     }
@@ -205,7 +206,7 @@ int processControlByte(int fd, unsigned char *controlByte){
 }
 
 
-int llwrite(int fd, char* buffer, int length){
+int llwrite(int fd, unsigned char* buffer, int length){
     int unsigned charactersWritten = 0;
     unsigned char controlByte;
     if(info.ns == 1)
@@ -240,7 +241,6 @@ int llwrite(int fd, char* buffer, int length){
           frameIndex++;
         }
       }
-
       if(bcc2 == 0x7E || bcc2 == 0x7D){
         frameToSend[frameIndex] = 0x7D;
         frameIndex++;
@@ -254,12 +254,11 @@ int llwrite(int fd, char* buffer, int length){
       frameToSend[frameIndex] = 0x7E;
 
       frameLength = frameIndex+1;
-
       charactersWritten = write(fd,frameToSend,frameLength);
 
       info.alarmFlag = 0;
       initializeAlarm();
-
+      
       //read receiver response
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
         disableAlarm();
@@ -353,6 +352,7 @@ int verifyFrame(unsigned char* frame,int length){
     {
       aux^=frame[i];
     }
+    
     if(bcc2 != aux){
       printf("Error in bcc2!\n");
       return -2;
@@ -362,7 +362,7 @@ int verifyFrame(unsigned char* frame,int length){
   return 0;
 }
 
-int llread(int fd,char* buffer){
+int llread(int fd,unsigned char* buffer){
   int received = 0;
   int length = 0;
   unsigned char controlByte;
@@ -370,7 +370,6 @@ int llread(int fd,char* buffer){
   int buffIndex = 0;
   while(received == 0){
     length = readTransmitterFrame(fd,auxBuffer);
-
     if(length > 0){
       unsigned char originalFrame[2*length+6];
       //destuffing
@@ -388,12 +387,12 @@ int llread(int fd,char* buffer){
           continue;
         }
         else if(auxBuffer[i] == (0x7E^0x20) && escapeByteFound == 1){
-          originalFrame[originalFrameIndex] = auxBuffer[i];
+          originalFrame[originalFrameIndex] = 0x7E;
           originalFrameIndex++;
           escapeByteFound = 0;
         }
         else if(auxBuffer[i] == (0x7D^0x20) && escapeByteFound == 1){
-          originalFrame[originalFrameIndex] = auxBuffer[i];
+          originalFrame[originalFrameIndex] = 0x7D;
           originalFrameIndex++;
           escapeByteFound = 0;
         }
@@ -404,7 +403,6 @@ int llread(int fd,char* buffer){
       }
       originalFrame[originalFrameIndex] = auxBuffer[length-1];
       controlByte = originalFrame[2];
-
       if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
         if(controlByte == 0x00){
           unsigned char frameToSend[5];

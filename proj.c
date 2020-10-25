@@ -2,7 +2,7 @@
 
 int main(int argc, char** argv)
 {
-    /*if ( (argc < 3) || 
+    if ( (argc < 3) || 
     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
     (strcmp("/dev/ttyS1", argv[1])!=0) && 
     (strcmp("/dev/ttyS10", argv[1])!=0) &&  
@@ -13,8 +13,8 @@ int main(int argc, char** argv)
 
     int fd;
     int flag;
-    char teste[3] = "ola";
-    char final[3] = {0};
+    unsigned char fileName[11] = "pinguim.gif";
+    //unsigned char result[11];
 
     if(strcmp("1",argv[2]) == 0){
       flag = RECEIVER;
@@ -31,18 +31,17 @@ int main(int argc, char** argv)
     fd = llopen(argv[1],flag);
 
     if(flag == RECEIVER){
-      llread(fd,final);
-      printf("%s\n",final);
+      receiveFile(fd);
+      /*llread(fd,result);
+      printf("%s\n",result);*/
     }
     else if(flag == TRANSMITTER){
-      llwrite(fd,teste,3);
+      sendFile(fileName,fd);
+      //llwrite(fd,fileName,11);
     }
+    llclose(fd,flag);
 
-    llclose(fd,flag);*/
-
-    char name[11] = "pinguim.gif";
-
-    readFileInformation(name);
+  
 
     return 0;
 }

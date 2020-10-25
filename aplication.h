@@ -20,5 +20,11 @@ int sendControlPacket(unsigned char controlByte);
 
 int sendDataPacket();
 
+int sendFile(char* fileName, int fdPort);
+
 int readControlPacket();
+
+int processDataPackets(unsigned char* packet);
+
+int receiveFile(int fdPort);
 

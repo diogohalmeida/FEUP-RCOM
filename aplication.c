@@ -18,7 +18,7 @@ int readFileInformation(char* fileName){
         return -1;
     }
 
-    //app.fdFile = fd;
+    app.fdFile = fd;
     app.fileName = fileName;
     app.fileSize = status.st_size;
 
@@ -30,7 +30,7 @@ int sendControlPacket(unsigned char controlByte){
     int packetIndex = 0;
     int numBytesFileSize = sizeof(app.fileSize);
 
-    char packet[5+numBytesFileSize + strlen(app.fileName)];
+    unsigned char packet[5+numBytesFileSize + strlen(app.fileName)];
 
     packet[packetIndex] = controlByte;
     packetIndex++;
@@ -64,7 +64,7 @@ int sendControlPacket(unsigned char controlByte){
 
     packet[packetIndex] = app.fileSize & 0xFF;
     packetIndex++;
-
+    
     if(llwrite(app.fdPort,packet,packetIndex) < packetIndex){
         printf("Error writing control packet to serial port!\n");
         return -1;
@@ -86,12 +86,12 @@ int sendDataPacket(){
         numPacketsToSend++;
     }
 
-    while(numPacketsSent > numPacketsToSend){
+    while(numPacketsSent < numPacketsToSend){
 
         if((bytesRead = read(app.fdFile,buffer,1024)) < 0){
             printf("Error reading file\n");
         }
-        char packet[4+1024];
+        unsigned char packet[4+1024];
         packet[0] = 0x01;
         packet[1] = numPacketsSent % 255;
         packet[2] = bytesRead / 256;
@@ -111,11 +111,13 @@ int sendDataPacket(){
     return 0;
 }
 
-int sendFile(char* fileName){
+int sendFile(char* fileName, int fdPort){
+    app.fdPort = fdPort;
+
     if(readFileInformation(fileName) < 0){
         printf("Error reading file information!\n");
     }
-
+    
     if(sendControlPacket(0x02) < 0){
         printf("Error sending start control packet!\n");
         return -1;
@@ -136,7 +138,7 @@ int sendFile(char* fileName){
 
 
 int readControlPacket(){
-    char packet[1024];
+    unsigned char packet[1024];
     int packetIndex = 1;
     int fileNameLength = 0;
     char* fileName;
@@ -167,7 +169,7 @@ int readControlPacket(){
     return 0;
 }
 
-int processDataPackets(char* packet){
+int processDataPackets(unsigned char* packet){
     
     int informationSize = 256*packet[2]+packet[3];
 
@@ -176,9 +178,11 @@ int processDataPackets(char* packet){
     return 0;
 }
 
-int receiveFile(){
-    char buffer[1024+4];
+int receiveFile(int fdPort){
+    unsigned char buffer[1024+4];
     int stop = 0;
+
+    app.fdPort = fdPort;
 
     readControlPacket();
 
@@ -192,7 +196,6 @@ int receiveFile(){
             }
         }
     }
-
     close(app.fdFile);
 
     return 0;
