@@ -227,7 +227,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
         frameToSend[2] = 0x40;
       }
       frameToSend[3] = frameToSend[1] ^ frameToSend[2]; 
-
+      
       for (size_t i = 0; i < length; i++){
         bcc2 ^= buffer[i];
         if(buffer[i] == 0x7E || buffer[i] == 0x7D){   //if the byte its equal to the flag or to the escape byte
@@ -432,6 +432,7 @@ int llread(int fd,unsigned char* buffer){
           buffer[buffIndex] = originalFrame[i];
           buffIndex++;
         }
+        
         if(controlByte == 0x00){
           unsigned char frameToSend[5];
           frameToSend[0] = 0x7E;

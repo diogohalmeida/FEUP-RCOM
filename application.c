@@ -1,4 +1,4 @@
-#include "aplication.h"
+#include "application.h"
 
 
 ApplicationLayer app;
@@ -81,7 +81,7 @@ int sendDataPacket(){
     unsigned char buffer[1024];
     int bytesRead = 0;
     int length = 0;
-
+    
     if(app.fileSize%1024 != 0){
         numPacketsToSend++;
     }
@@ -103,10 +103,9 @@ int sendDataPacket(){
             printf("Error writing data packet to serial port!\n");
             return -1;
         }
-
         numPacketsSent++;
-
     }
+
 
     return 0;
 }
@@ -127,8 +126,8 @@ int sendFile(char* fileName, int fdPort){
         printf("Error sending data packet!\n");
         return -1;
     }
-
-    if(sendDataPacket(0x03) < 0){
+    
+    if(sendControlPacket(0x03) < 0){
         printf("Error sending end control packet!\n");
         return -1;
     }
@@ -159,12 +158,12 @@ int readControlPacket(){
 
             if(i == fileNameLength-1){
                 packet[packetIndex] = '\0';
+                packetIndex++;
             }
         }
-        
     }
 
-    app.fdFile = open(fileName,O_WRONLY | O_CREAT | O_APPEND);
+    app.fdFile = open(fileName,O_WRONLY | O_CREAT | O_APPEND, 0664);
 
     return 0;
 }
@@ -172,8 +171,8 @@ int readControlPacket(){
 int processDataPackets(unsigned char* packet){
     
     int informationSize = 256*packet[2]+packet[3];
-
-    write(app.fdFile,&packet[4],informationSize);
+ 
+    write(app.fdFile,packet+4,informationSize);
 
     return 0;
 }
@@ -196,6 +195,7 @@ int receiveFile(int fdPort){
             }
         }
     }
+
     close(app.fdFile);
 
     return 0;

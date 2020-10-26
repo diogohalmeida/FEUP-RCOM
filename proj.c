@@ -1,4 +1,4 @@
-#include "aplication.h"
+#include "application.h"
 
 int main(int argc, char** argv)
 {
@@ -13,7 +13,7 @@ int main(int argc, char** argv)
 
     int fd;
     int flag;
-    unsigned char fileName[11] = "pinguim.gif";
+    char fileName[11] = "pinguim.gif";
     //unsigned char result[11];
 
     if(strcmp("1",argv[2]) == 0){
