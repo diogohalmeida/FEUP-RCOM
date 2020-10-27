@@ -84,7 +84,7 @@ int sendDataPacket(){
     int bytesRead = 0;
     int length = 0;
     
-    if(app.fileSize%1024 != 0){
+    if(app.fileSize%DATA_FIELD_LENGTH != 0){
         numPacketsToSend++;
     }
 
