@@ -12,24 +12,24 @@ void infoSetup(){
 
 
 int verifyControlByte(unsigned char byte){
-  return byte == 0x03 || byte == 0x0B || byte == 0x07 || byte == 0x05 || byte == 0x85 || byte == 0x81 || byte == 0x01;
+  return byte == CONTROL_BYTE_SET || byte == CONTROL_BYTE_DISC || byte == CONTROL_BYTE_UA || byte == CONTROL_BYTE_RR0 || byte == CONTROL_BYTE_RR1 || byte == CONTROL_BYTE_REJ0 || byte == CONTROL_BYTE_REJ1;
 }
 
 
 void responseStateMachine(enum state* currentState, unsigned char byte, unsigned char* controlByte){
     switch(*currentState){
         case START:
-            if(byte == 0x7E){    //flag
+            if(byte == FLAG){    //flag
                 *currentState = FLAG_RCV;
                 printf("GOING TO FLAG_RCV\n");
             }
             break;
         case FLAG_RCV:
-            if(byte == 0x03){   //acknowlegement
+            if(byte == ADDRESS_FIELD_CMD){   //acknowlegement
                 *currentState = A_RCV;
                 printf("GOING TO A_RCV\n");
             }
-            else if(byte != 0x7E){
+            else if(byte != FLAG){
               *currentState = START;
               printf("GOING TO START FROM FLAG_RCV\n");
             }
@@ -40,7 +40,7 @@ void responseStateMachine(enum state* currentState, unsigned char byte, unsigned
               *controlByte = byte;
               printf("GOING TO C_RCV\n");
             }
-            else if(byte == 0x7E){
+            else if(byte == FLAG){
                 *currentState = FLAG_RCV;
                 printf("GOING TO FLAG_RCV FROM A_RCV\n");
             }
@@ -50,11 +50,11 @@ void responseStateMachine(enum state* currentState, unsigned char byte, unsigned
             }
             break;
         case C_RCV:
-            if(byte == (0x03^(*controlByte))){
+            if(byte == (ADDRESS_FIELD_CMD^(*controlByte))){
               *currentState = BCC_OK;
               printf("GOING TO BCC_OK\n");
             }        
-            else if(byte == 0x7E){
+            else if(byte == FLAG){
               *currentState = FLAG_RCV;
               printf("GOING TO FLAG_RCV FROM C_RCV\n");
             }    
@@ -64,7 +64,7 @@ void responseStateMachine(enum state* currentState, unsigned char byte, unsigned
             }     
             break;
         case BCC_OK:
-            if(byte == 0x7E){
+            if(byte == FLAG){
               *currentState = STOP;
               printf("GOING TO STOP\n");
             }
@@ -140,11 +140,11 @@ int llopen(char *port,int flag){
     //First frames' transmission
     if(flag == TRANSMITTER){
       unsigned char controlFrame[5];
-      controlFrame[0] = 0x7E;
-      controlFrame[1] = 0x03;
-      controlFrame[2] = 0x03;
+      controlFrame[0] = FLAG;
+      controlFrame[1] = ADDRESS_FIELD_CMD;
+      controlFrame[2] = CONTROL_BYTE_SET;
       controlFrame[3] = controlFrame[1] ^ controlFrame[2];
-      controlFrame[4] = 0x7E;
+      controlFrame[4] = FLAG;
       do{
        write(fd,controlFrame,5);  //write SET   
        info.alarmFlag = 0;
@@ -163,11 +163,11 @@ int llopen(char *port,int flag){
     else if(flag == RECEIVER){
       readTransmitterResponse(fd);
       unsigned char controlFrame[5];
-      controlFrame[0] = 0x7E;
-      controlFrame[1] = 0x03;
-      controlFrame[2] = 0x07;
+      controlFrame[0] = FLAG;
+      controlFrame[1] = ADDRESS_FIELD_CMD;
+      controlFrame[2] = CONTROL_BYTE_UA;
       controlFrame[3] = controlFrame[1] ^ controlFrame[2];
-      controlFrame[4] = 0x7E;
+      controlFrame[4] = FLAG;
       write(fd,controlFrame,5);  //send UA
     }
 
@@ -189,18 +189,23 @@ int processControlByte(int fd, unsigned char *controlByte){
         responseStateMachine(&state,byte,controlByte);
     }
 
-    if(*controlByte == 0x05){
+    if(*controlByte == CONTROL_BYTE_RR0 && info.ns == 1){
       return 0;
     }
-    else if(*controlByte == 0x85){
+    else if(*controlByte == CONTROL_BYTE_RR1 && info.ns == 0){
       return 0;
     }
-    else if(*controlByte == 0x01){
+    else if(*controlByte == CONTROL_BYTE_REJ0 && info.ns == 1){
       return -1;
     }
-    else if(*controlByte == 0x81){
+    else if(*controlByte == CONTROL_BYTE_REJ1 && info.ns == 0){
       return -1;
     }
+    else
+    {
+      return -1;
+    }
+    
 
     return 0;
 }
@@ -218,22 +223,22 @@ int llwrite(int fd, unsigned char* buffer, int length){
       unsigned char bcc2 = 0x00;
 
       //Start to make the frame to be sent
-      frameToSend[0] = 0x7E;    //FLAG
-      frameToSend[1] = 0x03;    //UA
+      frameToSend[0] = FLAG;    //FLAG
+      frameToSend[1] = ADDRESS_FIELD_CMD;    //UA
       if(info.ns == 0)
-        frameToSend[2] = 0x00;
+        frameToSend[2] = CONTROL_BYTE_0;
       else
       {
-        frameToSend[2] = 0x40;
+        frameToSend[2] = CONTROL_BYTE_1;
       }
       frameToSend[3] = frameToSend[1] ^ frameToSend[2]; 
       
       for (size_t i = 0; i < length; i++){
         bcc2 ^= buffer[i];
-        if(buffer[i] == 0x7E || buffer[i] == 0x7D){   //if the byte its equal to the flag or to the escape byte
-          frameToSend[frameIndex] = 0x7D;
+        if(buffer[i] == FLAG || buffer[i] == ESC_BYTE){   //if the byte its equal to the flag or to the escape byte
+          frameToSend[frameIndex] = ESC_BYTE;
           frameIndex++;
-          frameToSend[frameIndex] = buffer[i] ^ 0x20;
+          frameToSend[frameIndex] = buffer[i] ^ STUFFING_BYTE;
           frameIndex++;
         }
         else{
@@ -241,17 +246,17 @@ int llwrite(int fd, unsigned char* buffer, int length){
           frameIndex++;
         }
       }
-      if(bcc2 == 0x7E || bcc2 == 0x7D){
-        frameToSend[frameIndex] = 0x7D;
+      if(bcc2 == FLAG || bcc2 == ESC_BYTE){
+        frameToSend[frameIndex] = ESC_BYTE;
         frameIndex++;
-        frameToSend[frameIndex] = bcc2 ^ 0x20;
+        frameToSend[frameIndex] = bcc2 ^ STUFFING_BYTE;
       }
       else{
         frameToSend[frameIndex] = bcc2;
         frameIndex++;
       }
 
-      frameToSend[frameIndex] = 0x7E;
+      frameToSend[frameIndex] = FLAG;
 
       frameLength = frameIndex+1;
       charactersWritten = write(fd,frameToSend,frameLength);
@@ -275,21 +280,21 @@ int llwrite(int fd, unsigned char* buffer, int length){
 void informationFrameStateMachine(enum state* currentState, unsigned char byte, unsigned char* controlByte){
     switch(*currentState){
         case START:
-            if(byte == 0x7E)     //flag
+            if(byte == FLAG)     //flag
                 *currentState = FLAG_RCV;
             break;
         case FLAG_RCV:
-            if(byte == 0x03)   //acknowlegement
+            if(byte == ADDRESS_FIELD_CMD)   //acknowlegement
                 *currentState = A_RCV;
-            else if(byte != 0x7E)
+            else if(byte != FLAG)
                 *currentState = START;
             break;
         case A_RCV:
-            if(byte == 0x00 || byte == 0x40){
+            if(byte == CONTROL_BYTE_0 || byte == CONTROL_BYTE_1){
               *currentState = C_RCV;
               *controlByte = byte;
             }
-            else if(byte == 0x7E){
+            else if(FLAG == 0x7E){
                 *currentState = FLAG_RCV;
             }
             else{
@@ -297,20 +302,20 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
             }
             break;
         case C_RCV:
-            if(byte == (0x03^(*controlByte)))
+            if(byte == (ADDRESS_FIELD_CMD^(*controlByte)))
               *currentState = BCC_OK;
-            else if(byte == 0x7E)
+            else if(byte == FLAG)
               *currentState = FLAG_RCV;
             else
               *currentState = START;
             
             break;
         case BCC_OK:
-            if(byte != 0x7E)
+            if(byte != FLAG)
               *currentState = DATA_RCV;
             break;
         case DATA_RCV:
-            if(byte == 0x7E)
+            if(byte == FLAG)
               *currentState = STOP;
             break;
         case STOP:
@@ -342,7 +347,7 @@ int verifyFrame(unsigned char* frame,int length){
   unsigned char aux = 0x00;
 
   //verify if the bcc1 is correct
-  if(controlByte != 0x00 && controlByte != 0x40){
+  if(controlByte != CONTROL_BYTE_0 && controlByte != CONTROL_BYTE_1){
     printf("Error in control byte!\n");
     return -1;
   }
@@ -382,17 +387,17 @@ int llread(int fd,unsigned char* buffer){
 
       for (size_t i = 4; i < length-1; i++)
       {
-        if(auxBuffer[i] == 0x7D){
+        if(auxBuffer[i] == ESC_BYTE){
           escapeByteFound = 1;
           continue;
         }
-        else if(auxBuffer[i] == (0x7E^0x20) && escapeByteFound == 1){
-          originalFrame[originalFrameIndex] = 0x7E;
+        else if(auxBuffer[i] == (FLAG^STUFFING_BYTE) && escapeByteFound == 1){
+          originalFrame[originalFrameIndex] = FLAG;
           originalFrameIndex++;
           escapeByteFound = 0;
         }
-        else if(auxBuffer[i] == (0x7D^0x20) && escapeByteFound == 1){
-          originalFrame[originalFrameIndex] = 0x7D;
+        else if(auxBuffer[i] == (ESC_BYTE^STUFFING_BYTE) && escapeByteFound == 1){
+          originalFrame[originalFrameIndex] = ESC_BYTE;
           originalFrameIndex++;
           escapeByteFound = 0;
         }
@@ -404,23 +409,23 @@ int llread(int fd,unsigned char* buffer){
       originalFrame[originalFrameIndex] = auxBuffer[length-1];
       controlByte = originalFrame[2];
       if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
-        if(controlByte == 0x00){
+        if(controlByte == CONTROL_BYTE_0){
           unsigned char frameToSend[5];
-          frameToSend[0] = 0x7E;
-          frameToSend[1] = 0x03;
-          frameToSend[2] = 0x01;
+          frameToSend[0] = FLAG;
+          frameToSend[1] = ADDRESS_FIELD_CMD;
+          frameToSend[2] = CONTROL_BYTE_REJ0;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
-          frameToSend[4] = 0x7E;
+          frameToSend[4] = FLAG;
 
           write(fd,frameToSend,5);
         }
-        else if(controlByte == 0x40){
+        else if(controlByte == CONTROL_BYTE_1){
           unsigned char frameToSend[5];
-          frameToSend[0] = 0x7E;
-          frameToSend[1] = 0x03;
-          frameToSend[2] = 0x81;
+          frameToSend[0] = FLAG;
+          frameToSend[1] = ADDRESS_FIELD_CMD;
+          frameToSend[2] = CONTROL_BYTE_REJ1;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
-          frameToSend[4] = 0x7E;
+          frameToSend[4] = FLAG;
 
           write(fd,frameToSend,5);
         }
@@ -433,23 +438,23 @@ int llread(int fd,unsigned char* buffer){
           buffIndex++;
         }
         
-        if(controlByte == 0x00){
+        if(controlByte == CONTROL_BYTE_0){
           unsigned char frameToSend[5];
-          frameToSend[0] = 0x7E;
-          frameToSend[1] = 0x03;
-          frameToSend[2] = 0x85;
+          frameToSend[0] = FLAG;
+          frameToSend[1] = ADDRESS_FIELD_CMD;
+          frameToSend[2] = CONTROL_BYTE_RR1;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
-          frameToSend[4] = 0x7E;
+          frameToSend[4] = FLAG;
 
           write(fd,frameToSend,5);
         }
-        else if(controlByte == 0x40){
+        else if(controlByte == CONTROL_BYTE_1){
           unsigned char frameToSend[5];
-          frameToSend[0] = 0x7E;
-          frameToSend[1] = 0x03;
-          frameToSend[2] = 0x05;
+          frameToSend[0] = FLAG;
+          frameToSend[1] = ADDRESS_FIELD_CMD;
+          frameToSend[2] = CONTROL_BYTE_RR0;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
-          frameToSend[4] = 0x7E;
+          frameToSend[4] = FLAG;
 
           write(fd,frameToSend,5);
         }
@@ -465,8 +470,8 @@ int llclose(int fd, int flag){
     if(flag == TRANSMITTER){
         unsigned char controlFrameDISC[5];
         controlFrameDISC[0] = FLAG;
-        controlFrameDISC[1] = A_CMD;
-        controlFrameDISC[2] = C_DISC;
+        controlFrameDISC[1] = ADDRESS_FIELD_CMD;
+        controlFrameDISC[2] = CONTROL_BYTE_DISC;
         controlFrameDISC[3] = controlFrameDISC[1] ^ controlFrameDISC[2];
         controlFrameDISC[4] = FLAG;
 
@@ -486,8 +491,8 @@ int llclose(int fd, int flag){
         else{
             unsigned char controlFrameUA[5];
             controlFrameUA[0] = FLAG;
-            controlFrameUA[1] = A_CMD;
-            controlFrameUA[2] = C_UA;
+            controlFrameUA[1] = ADDRESS_FIELD_CMD;
+            controlFrameUA[2] = CONTROL_BYTE_UA;
             controlFrameUA[3] = controlFrameUA[1] ^ controlFrameUA[2];
             controlFrameUA[4] = FLAG;
 
@@ -500,8 +505,8 @@ int llclose(int fd, int flag){
         readTransmitterResponse(fd);
         unsigned char controlFrame[5];
         controlFrame[0] = FLAG;
-        controlFrame[1] = A_CMD;
-        controlFrame[2] = C_DISC;
+        controlFrame[1] = ADDRESS_FIELD_CMD;
+        controlFrame[2] = CONTROL_BYTE_DISC;
         controlFrame[3] = controlFrame[1] ^ controlFrame[2];
         controlFrame[4] = FLAG;
 

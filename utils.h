@@ -8,23 +8,30 @@
 #define TRANSMITTER 0
 #define RECEIVER 1
 
-#define C0     0x00
-#define C1     0x40
 
 #define FLAG 0x7E
-#define A_CMD 0x03
-#define A_REP 0x01
+#define ADDRESS_FIELD_CMD 0x03
+#define CONTROL_BYTE_0   0x00
+#define CONTROL_BYTE_1   0x40
+#define CONTROL_BYTE_SET 0x03
+#define CONTROL_BYTE_DISC 0x0B
+#define CONTROL_BYTE_UA 0x07
+#define CONTROL_BYTE_RR0 0x05
+#define CONTROL_BYTE_RR1 0x85
+#define CONTROL_BYTE_REJ0 0x01
+#define CONTROL_BYTE_REJ1 0x81
 
-#define C_SET 	0x03
-#define C_DISC 	0x0B
-#define C_UA 	0x07
-#define C_RR0	0x05
-#define C_RR1	0x85
-#define C_REJ0	0x81
-#define C_REJ1	0x01
+#define ESC_BYTE 0x7D
+#define STUFFING_BYTE 0x20
 
-#define ESC 0x7D
-#define STUFFING
+#define START_FLAG 0x02
+#define END_FLAG 0x03
+#define FILE_NAME_FLAG 0x01
+#define FILE_SIZE_FLAG 0x00
+#define DATA_FLAG 0x01
+#define BYTE_MASK 0xFF
+#define DATA_FIELD_LENGTH 512
+
 
 #define MAX_TRIES 3
 

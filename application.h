@@ -13,6 +13,14 @@ typedef struct{
 
 } ApplicationLayer;
 
+typedef struct 
+{
+    char* fileName;
+    int fileSize;
+    
+} ControlPacketInformation;
+
+
 int readFileInformation(char* fileName);
 
 
@@ -25,6 +33,8 @@ int sendFile(char* fileName, int fdPort);
 int readControlPacket();
 
 int processDataPackets(unsigned char* packet);
+
+void checkControlPacketInformation(unsigned char* packet);
 
 int receiveFile(int fdPort);
 

@@ -3,6 +3,8 @@
 
 ApplicationLayer app;
 
+ControlPacketInformation packetInfo;
+
 int readFileInformation(char* fileName){
 
     int fd;
@@ -35,7 +37,7 @@ int sendControlPacket(unsigned char controlByte){
     packet[packetIndex] = controlByte;
     packetIndex++;
 
-    packet[packetIndex] = 0x01;  //flag nome do ficheiro
+    packet[packetIndex] = FILE_NAME_FLAG;  //flag nome do ficheiro
     packetIndex++;
     
     packet[packetIndex] = strlen(app.fileName);  // lenght do nome do ficheiro
@@ -47,22 +49,22 @@ int sendControlPacket(unsigned char controlByte){
         packetIndex++;
     }
 
-    packet[packetIndex] = 0x00;   //flag que indica o tamanho do ficheiro
+    packet[packetIndex] = FILE_SIZE_FLAG;   //flag que indica o tamanho do ficheiro
     packetIndex++;
 
     packet[packetIndex] = numBytesFileSize;
     packetIndex++;
 
-    packet[packetIndex] = (app.fileSize >> 24) & 0xFF;
+    packet[packetIndex] = (app.fileSize >> 24) & BYTE_MASK;
     packetIndex++;
 
-    packet[packetIndex] = (app.fileSize >> 16) & 0xFF;
+    packet[packetIndex] = (app.fileSize >> 16) & BYTE_MASK;
     packetIndex++;
 
-    packet[packetIndex] = (app.fileSize >> 8) & 0xFF;
+    packet[packetIndex] = (app.fileSize >> 8) & BYTE_MASK;
     packetIndex++;
 
-    packet[packetIndex] = app.fileSize & 0xFF;
+    packet[packetIndex] = app.fileSize & BYTE_MASK;
     packetIndex++;
     
     if(llwrite(app.fdPort,packet,packetIndex) < packetIndex){
@@ -77,8 +79,8 @@ int sendControlPacket(unsigned char controlByte){
 int sendDataPacket(){
 
     int numPacketsSent = 0;
-    int numPacketsToSend = app.fileSize/1024;            // numero máximo de de octetos num packet
-    unsigned char buffer[1024];
+    int numPacketsToSend = app.fileSize/DATA_FIELD_LENGTH;            // numero máximo de de octetos num packet
+    unsigned char buffer[DATA_FIELD_LENGTH];
     int bytesRead = 0;
     int length = 0;
     
@@ -88,11 +90,11 @@ int sendDataPacket(){
 
     while(numPacketsSent < numPacketsToSend){
 
-        if((bytesRead = read(app.fdFile,buffer,1024)) < 0){
+        if((bytesRead = read(app.fdFile,buffer,DATA_FIELD_LENGTH)) < 0){
             printf("Error reading file\n");
         }
-        unsigned char packet[4+1024];
-        packet[0] = 0x01;
+        unsigned char packet[4+DATA_FIELD_LENGTH];
+        packet[0] = DATA_FLAG;
         packet[1] = numPacketsSent % 255;
         packet[2] = bytesRead / 256;
         packet[3] = bytesRead % 256;
@@ -117,7 +119,7 @@ int sendFile(char* fileName, int fdPort){
         printf("Error reading file information!\n");
     }
     
-    if(sendControlPacket(0x02) < 0){
+    if(sendControlPacket(START_FLAG) < 0){
         printf("Error sending start control packet!\n");
         return -1;
     }
@@ -127,7 +129,7 @@ int sendFile(char* fileName, int fdPort){
         return -1;
     }
     
-    if(sendControlPacket(0x03) < 0){
+    if(sendControlPacket(END_FLAG) < 0){
         printf("Error sending end control packet!\n");
         return -1;
     }
@@ -137,15 +139,16 @@ int sendFile(char* fileName, int fdPort){
 
 
 int readControlPacket(){
-    unsigned char packet[1024];
+    unsigned char packet[DATA_FIELD_LENGTH];
     int packetIndex = 1;
     int fileNameLength = 0;
+    int fileSize = 0;
     char* fileName;
 
     llread(app.fdPort,packet);
 
 
-    if(packet[packetIndex] == 0x01){              //flag do nome do ficheiro
+    if(packet[packetIndex] == FILE_NAME_FLAG){              //flag do nome do ficheiro
         packetIndex++;
         fileName = (char*) malloc(packet[packetIndex]+1);
         fileNameLength = packet[packetIndex];
@@ -163,9 +166,66 @@ int readControlPacket(){
         }
     }
 
+    if(packet[packetIndex] == FILE_SIZE_FLAG){
+        packetIndex+=2;
+        fileSize += packet[packetIndex] << 24;
+        packetIndex++;
+        fileSize += packet[packetIndex] << 16;
+        packetIndex++;
+        fileSize += packet[packetIndex] << 8;
+        packetIndex++;
+        fileSize += packet[packetIndex];
+        
+    }
+
+    packetInfo.fileName = fileName;
+    packetInfo.fileSize = fileSize;
+
     app.fdFile = open(fileName,O_WRONLY | O_CREAT | O_APPEND, 0664);
 
     return 0;
+}
+
+void checkControlPacketInformation(unsigned char* packet){
+    int packetIndex = 1;
+    int fileNameLength = 0;
+    int fileSize = 0;
+    char* fileName;
+
+    if(packet[packetIndex] == FILE_NAME_FLAG){              //flag do nome do ficheiro
+        packetIndex++;
+        fileName = (char*) malloc(packet[packetIndex]+1);
+        fileNameLength = packet[packetIndex];
+        packetIndex++;
+
+        for (size_t i = 0; i < fileNameLength; i++)
+        {
+            fileName[i] = packet[packetIndex];
+            packetIndex++;
+
+            if(i == fileNameLength-1){
+                packet[packetIndex] = '\0';
+                packetIndex++;
+            }
+        }
+    }
+
+    if(packet[packetIndex] == FILE_SIZE_FLAG){
+        packetIndex+=2;
+        fileSize += packet[packetIndex] << 24;
+        packetIndex++;
+        fileSize += packet[packetIndex] << 16;
+        packetIndex++;
+        fileSize += packet[packetIndex] << 8;
+        packetIndex++;
+        fileSize += packet[packetIndex];
+        
+    }
+
+    if(packetInfo.fileSize != fileSize || strcmp(packetInfo.fileName,fileName)!= 0){
+        printf("Start packet and end packet have different file name and/or different file size\n");
+    }
+
 }
 
 int processDataPackets(unsigned char* packet){
@@ -178,7 +238,7 @@ int processDataPackets(unsigned char* packet){
 }
 
 int receiveFile(int fdPort){
-    unsigned char buffer[1024+4];
+    unsigned char buffer[DATA_FIELD_LENGTH+4];
     int stop = 0;
 
     app.fdPort = fdPort;
@@ -187,10 +247,11 @@ int receiveFile(int fdPort){
 
     while(!stop){
         if(llread(app.fdPort,buffer) != 0){
-            if(buffer[0] == 0x01){
+            if(buffer[0] == DATA_FLAG){
                 processDataPackets(buffer);
             }
-            else if(buffer[0] == 0x03){
+            else if(buffer[0] == END_FLAG){
+                checkControlPacketInformation(buffer);
                 stop = 1;
             }
         }
