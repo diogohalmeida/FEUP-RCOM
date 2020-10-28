@@ -246,7 +246,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
           frameIndex++;
         }
       }
-      //printf("%d\n",(int)(bcc2));
+
       if(bcc2 == FLAG || bcc2 == ESC_BYTE){
         frameToSend[frameIndex] = ESC_BYTE;
         frameIndex++;
@@ -361,12 +361,6 @@ int verifyFrame(unsigned char* frame,int length){
     }
     if(bcc2 != aux){
       printf("Error in bcc2!\n");
-     /* for (size_t i = 4; i < length-2; i++)
-    {
-      aux^=frame[i];
-      printf("%d\n",(int)(frame[i]));
-    }*/
-    exit(0);
       return -2;
     }
   }

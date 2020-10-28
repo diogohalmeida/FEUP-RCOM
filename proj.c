@@ -31,12 +31,9 @@ int main(int argc, char** argv)
 
     if(flag == RECEIVER){
       receiveFile(fd);
-      /*llread(fd,result);
-      printf("%s\n",result);*/
     }
     else if(flag == TRANSMITTER){
       sendFile(argv[3],fd);
-      //llwrite(fd,fileName,11);
     }
     llclose(fd,flag);
 
