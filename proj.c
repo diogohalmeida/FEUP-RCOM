@@ -2,7 +2,7 @@
 
 int main(int argc, char** argv)
 {
-    if ( (argc < 3) || 
+    if ( (argc < 4) || 
     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
     (strcmp("/dev/ttyS1", argv[1])!=0) && 
     (strcmp("/dev/ttyS10", argv[1])!=0) &&  
@@ -13,7 +13,6 @@ int main(int argc, char** argv)
 
     int fd;
     int flag;
-    char fileName[11] = "pinguim.gif";
     //unsigned char result[11];
 
     if(strcmp("1",argv[2]) == 0){
@@ -36,7 +35,7 @@ int main(int argc, char** argv)
       printf("%s\n",result);*/
     }
     else if(flag == TRANSMITTER){
-      sendFile(fileName,fd);
+      sendFile(argv[3],fd);
       //llwrite(fd,fileName,11);
     }
     llclose(fd,flag);

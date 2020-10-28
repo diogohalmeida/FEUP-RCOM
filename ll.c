@@ -246,10 +246,12 @@ int llwrite(int fd, unsigned char* buffer, int length){
           frameIndex++;
         }
       }
+      //printf("%d\n",(int)(bcc2));
       if(bcc2 == FLAG || bcc2 == ESC_BYTE){
         frameToSend[frameIndex] = ESC_BYTE;
         frameIndex++;
         frameToSend[frameIndex] = bcc2 ^ STUFFING_BYTE;
+        frameIndex++;
       }
       else{
         frameToSend[frameIndex] = bcc2;
@@ -357,9 +359,14 @@ int verifyFrame(unsigned char* frame,int length){
     {
       aux^=frame[i];
     }
-    
     if(bcc2 != aux){
       printf("Error in bcc2!\n");
+     /* for (size_t i = 4; i < length-2; i++)
+    {
+      aux^=frame[i];
+      printf("%d\n",(int)(frame[i]));
+    }*/
+    exit(0);
       return -2;
     }
   }
@@ -375,6 +382,7 @@ int llread(int fd,unsigned char* buffer){
   int buffIndex = 0;
   while(received == 0){
     length = readTransmitterFrame(fd,auxBuffer);
+
     if(length > 0){
       unsigned char originalFrame[2*length+6];
       //destuffing

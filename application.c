@@ -98,9 +98,9 @@ int sendDataPacket(){
         packet[1] = numPacketsSent % 255;
         packet[2] = bytesRead / 256;
         packet[3] = bytesRead % 256;
-
         memcpy(&packet[4],buffer,bytesRead);
         length = bytesRead + 4;
+
         if(llwrite(app.fdPort,packet,length) < length){
             printf("Error writing data packet to serial port!\n");
             return -1;
