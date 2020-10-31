@@ -2,7 +2,7 @@
 
 int main(int argc, char** argv)
 {
-    if ( (argc < 4) || 
+    if ( (argc < 5) || 
     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
     (strcmp("/dev/ttyS1", argv[1])!=0) && 
     (strcmp("/dev/ttyS10", argv[1])!=0) &&  
@@ -13,12 +13,11 @@ int main(int argc, char** argv)
 
     int fd;
     int flag;
-    //unsigned char result[11];
+    int packetSize = atoi(argv[4]);
 
     if(strcmp("1",argv[2]) == 0){
       flag = RECEIVER;
     }
-
     else if(strcmp("0",argv[2]) == 0){
       flag = TRANSMITTER;
     }
@@ -26,18 +25,19 @@ int main(int argc, char** argv)
       printf("Invalid argument for flag\n");
       exit(2);
     }
-
+    
     fd = llopen(argv[1],flag);
 
+    applicationSetUp(argv[3],packetSize,fd);
+
+    infoSetup(packetSize);
     if(flag == RECEIVER){
       receiveFile(fd);
     }
     else if(flag == TRANSMITTER){
-      sendFile(argv[3],fd);
+      sendFile();
     }
     llclose(fd,flag);
-
-  
 
     return 0;
 }

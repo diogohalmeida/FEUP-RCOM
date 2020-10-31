@@ -30,7 +30,6 @@
 #define FILE_SIZE_FLAG 0x00
 #define DATA_FLAG 0x01
 #define BYTE_MASK 0xFF
-#define DATA_FIELD_LENGTH 1024
 
 
 #define MAX_TRIES 3

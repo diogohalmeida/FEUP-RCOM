@@ -10,6 +10,7 @@ typedef struct{
     int fdPort;
     int fileSize;
     char* fileName; 
+    int packetSize;
 
 } ApplicationLayer;
 
@@ -20,15 +21,15 @@ typedef struct
     
 } ControlPacketInformation;
 
+void applicationSetUp(char * fileName, int packetSize, int fdPort);
 
 int readFileInformation(char* fileName);
-
 
 int sendControlPacket(unsigned char controlByte);
 
 int sendDataPacket();
 
-int sendFile(char* fileName, int fdPort);
+int sendFile();
 
 int readControlPacket();
 

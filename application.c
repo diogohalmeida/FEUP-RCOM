@@ -5,6 +5,12 @@ ApplicationLayer app;
 
 ControlPacketInformation packetInfo;
 
+void applicationSetUp(char * fileName, int packetSize, int fdPort){
+    app.fileName = fileName;
+    app.packetSize = packetSize;
+    app.fdPort = fdPort;
+}
+
 int readFileInformation(char* fileName){
 
     int fd;
@@ -79,21 +85,21 @@ int sendControlPacket(unsigned char controlByte){
 int sendDataPacket(){
 
     int numPacketsSent = 0;
-    int numPacketsToSend = app.fileSize/DATA_FIELD_LENGTH;            // numero máximo de de octetos num packet
-    unsigned char buffer[DATA_FIELD_LENGTH];
+    int numPacketsToSend = app.fileSize/app.packetSize;            // numero máximo de de octetos num packet
+    unsigned char buffer[app.packetSize];
     int bytesRead = 0;
     int length = 0;
     
-    if(app.fileSize%DATA_FIELD_LENGTH != 0){
+    if(app.fileSize%app.packetSize != 0){
         numPacketsToSend++;
     }
 
     while(numPacketsSent < numPacketsToSend){
 
-        if((bytesRead = read(app.fdFile,buffer,DATA_FIELD_LENGTH)) < 0){
+        if((bytesRead = read(app.fdFile,buffer,app.packetSize)) < 0){
             printf("Error reading file\n");
         }
-        unsigned char packet[4+DATA_FIELD_LENGTH];
+        unsigned char packet[4+app.packetSize];
         packet[0] = DATA_FLAG;
         packet[1] = numPacketsSent % 255;
         packet[2] = bytesRead / 256;
@@ -112,10 +118,9 @@ int sendDataPacket(){
     return 0;
 }
 
-int sendFile(char* fileName, int fdPort){
-    app.fdPort = fdPort;
+int sendFile(){
 
-    if(readFileInformation(fileName) < 0){
+    if(readFileInformation(app.fileName) < 0){
         printf("Error reading file information!\n");
     }
     
@@ -139,7 +144,7 @@ int sendFile(char* fileName, int fdPort){
 
 
 int readControlPacket(){
-    unsigned char packet[DATA_FIELD_LENGTH];
+    unsigned char packet[app.packetSize];
     int packetIndex = 1;
     int fileNameLength = 0;
     int fileSize = 0;
@@ -160,8 +165,7 @@ int readControlPacket(){
             packetIndex++;
 
             if(i == fileNameLength-1){
-                packet[packetIndex] = '\0';
-                packetIndex++;
+                fileName[fileNameLength] = '\0';
             }
         }
     }
@@ -238,7 +242,7 @@ int processDataPackets(unsigned char* packet){
 }
 
 int receiveFile(int fdPort){
-    unsigned char buffer[DATA_FIELD_LENGTH+4];
+    unsigned char buffer[app.packetSize+4];
     int stop = 0;
 
     app.fdPort = fdPort;
