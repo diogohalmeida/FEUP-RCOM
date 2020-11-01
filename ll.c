@@ -342,7 +342,7 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     while(state != STOP && info.alarmFlag == 0){
       if(read(fd,&byte,1) < 0){
         perror("Error reading byte");
-      }   
+      }  
       informationFrameStateMachine(&state,byte,&controlByte);
       buffer[lenght] = byte;
       lenght++;
@@ -381,7 +381,7 @@ int llread(int fd,unsigned char* buffer){
   int received = 0;
   int length = 0;
   unsigned char controlByte;
-  unsigned char auxBuffer[131072];
+  unsigned char auxBuffer[131076];
   int buffIndex = 0;
   while(received == 0){
     initializeAlarm();

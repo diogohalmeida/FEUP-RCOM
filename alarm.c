@@ -11,6 +11,7 @@ void initializeAlarm(){
 	sa.sa_handler = &sigAlarmHandler;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
+  info.alarmFlag = 0;
 
 	sigaction(SIGALRM, &sa, NULL);
 
