@@ -25,5 +25,6 @@ void disableAlarm(){
   sigaction(SIGALRM, &sa, NULL);
 
   info.alarmFlag = 0;
+
   alarm(0);
 }

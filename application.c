@@ -114,7 +114,6 @@ int sendDataPacket(){
         numPacketsSent++;
     }
 
-
     return 0;
 }
 
@@ -122,13 +121,14 @@ int sendFile(){
 
     if(readFileInformation(app.fileName) < 0){
         printf("Error reading file information!\n");
+        return -1;
     }
     
     if(sendControlPacket(START_FLAG) < 0){
         printf("Error sending start control packet!\n");
         return -1;
     }
-
+    
     if(sendDataPacket() < 0){
         printf("Error sending data packet!\n");
         return -1;
@@ -208,8 +208,7 @@ void checkControlPacketInformation(unsigned char* packet){
             packetIndex++;
 
             if(i == fileNameLength-1){
-                packet[packetIndex] = '\0';
-                packetIndex++;
+                fileName[fileNameLength] = '\0';
             }
         }
     }
@@ -237,20 +236,21 @@ int processDataPackets(unsigned char* packet){
     int informationSize = 256*packet[2]+packet[3];
  
     write(app.fdFile,packet+4,informationSize);
-
     return 0;
 }
 
 int receiveFile(int fdPort){
     unsigned char buffer[app.packetSize+4];
     int stop = 0;
+    int returnValue;
 
     app.fdPort = fdPort;
 
     readControlPacket();
 
     while(!stop){
-        if(llread(app.fdPort,buffer) != 0){
+        returnValue = llread(app.fdPort,buffer);
+        if(returnValue != 0){
             if(buffer[0] == DATA_FLAG){
                 processDataPackets(buffer);
             }
@@ -258,6 +258,10 @@ int receiveFile(int fdPort){
                 checkControlPacketInformation(buffer);
                 stop = 1;
             }
+        }
+        else if(returnValue == 0 && info.numTries >= MAX_TRIES){
+            info.alarmFlag = 1;
+            stop = 1;
         }
     }
 

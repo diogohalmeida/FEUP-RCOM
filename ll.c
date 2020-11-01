@@ -21,56 +21,45 @@ void responseStateMachine(enum state* currentState, unsigned char byte, unsigned
         case START:
             if(byte == FLAG){    //flag
                 *currentState = FLAG_RCV;
-                printf("GOING TO FLAG_RCV\n");
             }
             break;
         case FLAG_RCV:
             if(byte == ADDRESS_FIELD_CMD){   //acknowlegement
                 *currentState = A_RCV;
-                printf("GOING TO A_RCV\n");
             }
             else if(byte != FLAG){
               *currentState = START;
-              printf("GOING TO START FROM FLAG_RCV\n");
             }
             break;
         case A_RCV:
             if(verifyControlByte(byte)){
               *currentState = C_RCV;
               *controlByte = byte;
-              printf("GOING TO C_RCV\n");
             }
             else if(byte == FLAG){
                 *currentState = FLAG_RCV;
-                printf("GOING TO FLAG_RCV FROM A_RCV\n");
             }
             else{
                 *currentState = START;
-                printf("GOING TO START FROM A_RCV\n");
             }
             break;
         case C_RCV:
             if(byte == (ADDRESS_FIELD_CMD^(*controlByte))){
               *currentState = BCC_OK;
-              printf("GOING TO BCC_OK\n");
             }        
             else if(byte == FLAG){
               *currentState = FLAG_RCV;
-              printf("GOING TO FLAG_RCV FROM C_RCV\n");
             }    
             else{
               *currentState = START;
-              printf("GOING TO START FROM C_RCV\n");
             }     
             break;
         case BCC_OK:
             if(byte == FLAG){
               *currentState = STOP;
-              printf("GOING TO STOP\n");
             }
             else{
               *currentState = START;
-              printf("GOING TO START FROM BCC_OK\n");
             }
             break;
         case STOP:
@@ -86,7 +75,7 @@ void readReceiverResponse(int fd){
   unsigned char controlByte;
   while(state != STOP && info.alarmFlag == 0){
       if(read(fd,&byte,1) < 0){
-        perror("Error reading byte!\n");
+        perror("Error reading byte of the receiver response");
       }
       responseStateMachine(&state,byte,&controlByte);
   }
@@ -96,9 +85,9 @@ void readTransmitterResponse(int fd){
   unsigned char byte;
   enum state state = START;
   unsigned char controlByte;
-  while(state != STOP){
+  while(state != STOP && info.alarmFlag == 0){
     if(read(fd,&byte,1) < 0){
-      perror("Error reading byte!\n");
+      perror("Error reading byte of the transmitter response");
     }
     responseStateMachine(&state,byte,&controlByte);
   }
@@ -161,7 +150,20 @@ int llopen(char *port,int flag){
     }
 
     else if(flag == RECEIVER){
-      readTransmitterResponse(fd);
+      do{
+        initializeAlarm();
+        info.alarmFlag = 0;
+        readTransmitterResponse(fd);
+      }
+      while(info.alarmFlag == 1 && info.numTries < MAX_TRIES);
+        
+      disableAlarm();
+
+      if(info.numTries >= MAX_TRIES){
+        printf("Exceeded number of maximum tries!\n");
+        return -2;
+      }
+
       unsigned char controlFrame[5];
       controlFrame[0] = FLAG;
       controlFrame[1] = ADDRESS_FIELD_CMD;
@@ -182,9 +184,9 @@ int llopen(char *port,int flag){
 int processControlByte(int fd, unsigned char *controlByte){
     unsigned char byte;
     enum state state = START;
-    while(state != STOP){
-        if(read(fd,&byte,1) < 1){
-          perror("Error reading byte!\n");
+    while(state != STOP && info.alarmFlag == 0){
+        if(read(fd,&byte,1) < 0){
+          perror("Error reading byte");
         }
         responseStateMachine(&state,byte,controlByte);
     }
@@ -206,7 +208,6 @@ int processControlByte(int fd, unsigned char *controlByte){
       return -1;
     }
     
-
     return 0;
 }
 
@@ -270,11 +271,18 @@ int llwrite(int fd, unsigned char* buffer, int length){
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
         disableAlarm();
         info.alarmFlag = 1;
+        info.numTries++;
       }
 
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
-    
+
     disableAlarm();
+    
+    if(info.numTries >= MAX_TRIES){
+        printf("Exceeded number of maximum tries!\n");
+        return -1;
+    }
+
 
     return charactersWritten; 
 }
@@ -332,14 +340,13 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     unsigned char controlByte;
     enum state state = START;
     while(state != STOP && info.alarmFlag == 0){
-      initializeAlarm();
-      read(fd,&byte,1);
+      if(read(fd,&byte,1) < 0){
+        perror("Error reading byte");
+      }   
       informationFrameStateMachine(&state,byte,&controlByte);
       buffer[lenght] = byte;
       lenght++;
     }
-    disableAlarm();
-
     return lenght;
 }
 
@@ -366,7 +373,7 @@ int verifyFrame(unsigned char* frame,int length){
       return -2;
     }
   }
-
+  
   return 0;
 }
 
@@ -374,22 +381,26 @@ int llread(int fd,unsigned char* buffer){
   int received = 0;
   int length = 0;
   unsigned char controlByte;
-  unsigned char auxBuffer[2500];
+  unsigned char auxBuffer[131072];
   int buffIndex = 0;
   while(received == 0){
+    initializeAlarm();
     length = readTransmitterFrame(fd,auxBuffer);
+    disableAlarm();
     if(length > 0){
       unsigned char originalFrame[2*length+6];
       //destuffing
+      
       originalFrame[0] = auxBuffer[0];
       originalFrame[1] = auxBuffer[1];
       originalFrame[2] = auxBuffer[2];
       originalFrame[3] = auxBuffer[3];
+      
       int originalFrameIndex = 4;
       int escapeByteFound = 0;
 
       for (size_t i = 4; i < length-1; i++)
-      {
+      { 
         if(auxBuffer[i] == ESC_BYTE){
           escapeByteFound = 1;
           continue;
@@ -411,6 +422,7 @@ int llread(int fd,unsigned char* buffer){
       }
       originalFrame[originalFrameIndex] = auxBuffer[length-1];
       controlByte = originalFrame[2];
+
       if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
         if(controlByte == CONTROL_BYTE_0){
           unsigned char frameToSend[5];
@@ -419,7 +431,6 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[2] = CONTROL_BYTE_REJ0;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
-          printf("Estou aqui 1 \n");
           write(fd,frameToSend,5);
         }
         else if(controlByte == CONTROL_BYTE_1){
@@ -429,7 +440,6 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[2] = CONTROL_BYTE_REJ1;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
-          printf("Estou aqui 2 \n");
           write(fd,frameToSend,5);
         }
         return 0;
@@ -440,7 +450,6 @@ int llread(int fd,unsigned char* buffer){
           buffer[buffIndex] = originalFrame[i];
           buffIndex++;
         }
-        
         if(controlByte == CONTROL_BYTE_0){
           unsigned char frameToSend[5];
           frameToSend[0] = FLAG;
@@ -448,7 +457,6 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[2] = CONTROL_BYTE_RR1;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
-
           write(fd,frameToSend,5);
         }
         else if(controlByte == CONTROL_BYTE_1){
@@ -458,13 +466,13 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[2] = CONTROL_BYTE_RR0;
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
-
           write(fd,frameToSend,5);
         }
-        received = 1;
+        received = 1;       
       }
     }
   }
+        
   return buffIndex;
 }
 
@@ -534,5 +542,5 @@ int llclose(int fd, int flag){
 
 	close(fd);
 
-    return 0;
+  return 0;
 }

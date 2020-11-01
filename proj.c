@@ -31,13 +31,16 @@ int main(int argc, char** argv)
     applicationSetUp(argv[3],packetSize,fd);
 
     infoSetup(packetSize);
-    if(flag == RECEIVER){
-      receiveFile(fd);
-    }
-    else if(flag == TRANSMITTER){
-      sendFile();
-    }
-    llclose(fd,flag);
 
+    if(fd > 0){
+      if(flag == RECEIVER){
+        receiveFile(fd);
+      }
+      else if(flag == TRANSMITTER){
+        sendFile();
+      }
+      llclose(fd,flag);
+    }
+    
     return 0;
 }
