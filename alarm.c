@@ -1,7 +1,7 @@
 #include "alarm.h"
 
 void sigAlarmHandler(){
-  printf("Alarm!\n");
+  printf("Timeout!\n");
   info.alarmFlag = 1;
   info.numTries++;
 }

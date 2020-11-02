@@ -30,7 +30,7 @@ int main(int argc, char** argv)
 
     applicationSetUp(argv[3],packetSize,fd);
 
-    infoSetup(packetSize);
+    infoSetup();
 
     if(fd > 0){
       if(flag == RECEIVER){

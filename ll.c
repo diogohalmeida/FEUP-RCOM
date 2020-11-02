@@ -113,7 +113,7 @@ int llopen(char *port,int flag){
     /* set input mode (non-canonical, no echo,...) */
     info.newtio.c_lflag = 0;
 
-    info.newtio.c_cc[VTIME] = 1;   /* inter-unsigned character timer unused */
+    info.newtio.c_cc[VTIME] = 10;   /* inter-unsigned character timer unused */
     info.newtio.c_cc[VMIN] = 1;   /* blocking read until 5 unsigned chars received */
 
     tcflush(fd, TCIOFLUSH);
@@ -135,10 +135,14 @@ int llopen(char *port,int flag){
       controlFrame[3] = controlFrame[1] ^ controlFrame[2];
       controlFrame[4] = FLAG;
       do{
-       write(fd,controlFrame,5);  //write SET   
+       write(fd,controlFrame,5);  //write SET
+       printf("Sent SET\n");  
        info.alarmFlag = 0;
        initializeAlarm();
-       readReceiverResponse(fd);                    //read UA
+       readReceiverResponse(fd);
+       if(info.alarmFlag == 0){
+         printf("Received UA\n");
+       }                    //read UA
       } while(info.numTries < MAX_TRIES && info.alarmFlag);
 
       disableAlarm();
@@ -154,6 +158,9 @@ int llopen(char *port,int flag){
         initializeAlarm();
         info.alarmFlag = 0;
         readTransmitterResponse(fd);
+        if(info.alarmFlag == 0){
+          printf("Received SET\n");
+        }
       }
       while(info.alarmFlag == 1 && info.numTries < MAX_TRIES);
         
@@ -171,13 +178,14 @@ int llopen(char *port,int flag){
       controlFrame[3] = controlFrame[1] ^ controlFrame[2];
       controlFrame[4] = FLAG;
       write(fd,controlFrame,5);  //send UA
+      printf("Sent UA\n");
     }
 
     else{
         printf("Unknown function, must be a TRANSMITTER/RECEIVER\n");
         return 1;
     }
-
+    info.numTries = 0;
     return fd;
 }
 
@@ -192,15 +200,19 @@ int processControlByte(int fd, unsigned char *controlByte){
     }
 
     if(*controlByte == CONTROL_BYTE_RR0 && info.ns == 1){
+      printf("Received postive ACK 0\n");
       return 0;
     }
     else if(*controlByte == CONTROL_BYTE_RR1 && info.ns == 0){
+      printf("Received postive ACK 1\n");
       return 0;
     }
     else if(*controlByte == CONTROL_BYTE_REJ0 && info.ns == 1){
+      printf("Received negative ACK 0\n");
       return -1;
     }
     else if(*controlByte == CONTROL_BYTE_REJ1 && info.ns == 0){
+      printf("Received negative ACK 1\n");
       return -1;
     }
     else
@@ -217,6 +229,8 @@ int llwrite(int fd, unsigned char* buffer, int length){
     unsigned char controlByte;
     if(info.ns == 1)
       info.ns = 0;
+    else if(info.ns == 0)
+      info.ns = 1;
     do{
       //write frame
       unsigned char frameToSend[2*length+6];
@@ -264,7 +278,8 @@ int llwrite(int fd, unsigned char* buffer, int length){
       frameLength = frameIndex+1;
       charactersWritten = write(fd,frameToSend,frameLength);
 
-      info.alarmFlag = 0;
+      printf("Sent frame with sequence number %d\n",info.ns);
+      //info.alarmFlag = 0;
       initializeAlarm();
       
       //read receiver response
@@ -282,7 +297,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
         printf("Exceeded number of maximum tries!\n");
         return -1;
     }
-
+    info.numTries = 0;
 
     return charactersWritten; 
 }
@@ -341,8 +356,8 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     enum state state = START;
     while(state != STOP && info.alarmFlag == 0){
       if(read(fd,&byte,1) < 0){
-        perror("Error reading byte");
-      }  
+          perror("Error reading byte");
+      }
       informationFrameStateMachine(&state,byte,&controlByte);
       buffer[lenght] = byte;
       lenght++;
@@ -381,11 +396,14 @@ int llread(int fd,unsigned char* buffer){
   int received = 0;
   int length = 0;
   unsigned char controlByte;
-  unsigned char auxBuffer[131076];
+  unsigned char auxBuffer[131083];
   int buffIndex = 0;
   while(received == 0){
     initializeAlarm();
     length = readTransmitterFrame(fd,auxBuffer);
+    if(info.alarmFlag == 0){
+      printf("Received frame\n");
+    }
     disableAlarm();
     if(length > 0){
       unsigned char originalFrame[2*length+6];
@@ -425,6 +443,7 @@ int llread(int fd,unsigned char* buffer){
 
       if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
         if(controlByte == CONTROL_BYTE_0){
+          printf("Frame has 0 as sequence number\n");
           unsigned char frameToSend[5];
           frameToSend[0] = FLAG;
           frameToSend[1] = ADDRESS_FIELD_CMD;
@@ -432,8 +451,10 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
           write(fd,frameToSend,5);
+          printf("Sent negative ACK 0\n");
         }
         else if(controlByte == CONTROL_BYTE_1){
+          printf("Frame has 1 as sequence number\n");
           unsigned char frameToSend[5];
           frameToSend[0] = FLAG;
           frameToSend[1] = ADDRESS_FIELD_CMD;
@@ -441,6 +462,7 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
           write(fd,frameToSend,5);
+          printf("Sent negative ACK 1\n");
         }
         return 0;
       }
@@ -451,6 +473,7 @@ int llread(int fd,unsigned char* buffer){
           buffIndex++;
         }
         if(controlByte == CONTROL_BYTE_0){
+          printf("Frame has 0 as sequence number\n");
           unsigned char frameToSend[5];
           frameToSend[0] = FLAG;
           frameToSend[1] = ADDRESS_FIELD_CMD;
@@ -458,8 +481,10 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
           write(fd,frameToSend,5);
+          printf("Sent positive ACK 1\n");
         }
         else if(controlByte == CONTROL_BYTE_1){
+          printf("Frame has 1 as sequence number\n");
           unsigned char frameToSend[5];
           frameToSend[0] = FLAG;
           frameToSend[1] = ADDRESS_FIELD_CMD;
@@ -467,31 +492,39 @@ int llread(int fd,unsigned char* buffer){
           frameToSend[3] = frameToSend[1] ^ frameToSend[2];
           frameToSend[4] = FLAG;
           write(fd,frameToSend,5);
+          printf("Sent positive ACK 0\n");
         }
         received = 1;       
       }
     }
   }
-        
+      
   return buffIndex;
 }
 
 int llclose(int fd, int flag){
     //Last frames' transmission
     if(flag == TRANSMITTER){
+        if(info.numTries >= MAX_TRIES){
+            return -1;
+        }
         unsigned char controlFrameDISC[5];
         controlFrameDISC[0] = FLAG;
         controlFrameDISC[1] = ADDRESS_FIELD_CMD;
         controlFrameDISC[2] = CONTROL_BYTE_DISC;
         controlFrameDISC[3] = controlFrameDISC[1] ^ controlFrameDISC[2];
         controlFrameDISC[4] = FLAG;
-
         do{
             write(fd,controlFrameDISC,5);  //write DISC 
+            printf("Sent DISC\n");
             info.alarmFlag = 0;
             initializeAlarm();
             readReceiverResponse(fd);  //read DISC
         } while(info.numTries < MAX_TRIES && info.alarmFlag);
+
+        if(info.alarmFlag == 0){
+          printf("Received DISC\n");
+        }
         
         disableAlarm();
 
@@ -508,12 +541,32 @@ int llclose(int fd, int flag){
             controlFrameUA[4] = FLAG;
 
             write(fd,controlFrameUA,5); //write UA after receiving DISC
+            printf("Sent UA\n");
             sleep(1);
         }
     }
 
     else if(flag == RECEIVER){
-        readTransmitterResponse(fd);
+        if(info.numTries >= MAX_TRIES){
+            return -1;
+        }
+
+        do{
+          initializeAlarm();
+          readTransmitterResponse(fd);
+        }while(info.numTries < MAX_TRIES && info.alarmFlag == 1);  
+        
+        if(info.alarmFlag == 0){
+          printf("Receveid DISC\n");
+        }  
+
+        disableAlarm();
+
+        if(info.numTries >= MAX_TRIES){
+            printf("Exceeded number of maximum tries!\n");
+            return -1;
+        }
+
         unsigned char controlFrame[5];
         controlFrame[0] = FLAG;
         controlFrame[1] = ADDRESS_FIELD_CMD;
@@ -522,9 +575,22 @@ int llclose(int fd, int flag){
         controlFrame[4] = FLAG;
 
         write(fd,controlFrame,5);  //send DISC
+        printf("Sent DISC\n");
 
-        readTransmitterResponse(fd);
+        do{
+          initializeAlarm();
+          readTransmitterResponse(fd);
+        }while(info.numTries < MAX_TRIES && info.alarmFlag == 1);  
         
+        if(info.alarmFlag == 0){
+          printf("Received UA\n");
+        }  
+        disableAlarm();
+
+        if(info.numTries >= MAX_TRIES){
+            printf("Exceeded number of maximum tries!\n");
+            return -1;
+        }
     }
 
     else{
