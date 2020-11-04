@@ -15,7 +15,7 @@ void initializeAlarm(){
 
 	sigaction(SIGALRM, &sa, NULL);
 
-  alarm(3); 
+  alarm(20); 
 
 }
 
