@@ -384,13 +384,39 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     unsigned char byte;
     unsigned char controlByte;
     enum state state = START;
+    int count = 0;
+    int escapeByteFound = 0;
+
     while(state != STOP){
       if(read(fd,&byte,1) < 0){
           perror("Error reading byte");
       }
       informationFrameStateMachine(&state,byte,&controlByte);
-      buffer[length] = byte;
-      length++;
+      count++;
+      if(count > 4 && byte != FLAG){
+        if(byte == ESC_BYTE){
+          escapeByteFound = 1;
+          continue;
+        }
+        else if(byte == (FLAG^STUFFING_BYTE) && escapeByteFound == 1){
+          buffer[length] = FLAG;
+          length++;
+          escapeByteFound = 0;
+        }
+        else if(byte == (ESC_BYTE^STUFFING_BYTE) && escapeByteFound == 1){
+          buffer[length] = ESC_BYTE;
+          length++;
+          escapeByteFound = 0;
+        }
+        else{
+          buffer[length] = byte;
+          length++;
+        }
+      }
+      else{
+        buffer[length] = byte;
+        length++;
+      }
     }
     return length;
 }
@@ -427,17 +453,19 @@ int llread(int fd,unsigned char* buffer){
   int length = 0;
   unsigned char controlByte;
   unsigned char auxBuffer[131087];
+  unsigned char bcc1;
   int buffIndex = 0;
-  info.numTries = 0;
+  unsigned char bcc2 = 0x00;
+  unsigned char addressField;
   while(received == 0){
     length = readTransmitterFrame(fd,auxBuffer);
     printf("Received frame\n");
 
     if(length > 0){
-      unsigned char originalFrame[2*length+7];
+      //unsigned char originalFrame[2*length+7];
       //destuffing
       
-      originalFrame[0] = auxBuffer[0];
+      /*originalFrame[0] = auxBuffer[0];
       originalFrame[1] = auxBuffer[1];
       originalFrame[2] = auxBuffer[2];
       originalFrame[3] = auxBuffer[3];
@@ -467,9 +495,17 @@ int llread(int fd,unsigned char* buffer){
         }
       }
       originalFrame[originalFrameIndex] = auxBuffer[length-1];
-      controlByte = originalFrame[2];
-
-      if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
+      controlByte = originalFrame[2];*/
+      controlByte = auxBuffer[2];
+      addressField = auxBuffer[1];
+      bcc1 = auxBuffer[3];
+      for (size_t i = 4; i < length-2; i++)
+      {
+        bcc2 ^= auxBuffer[i];
+      }
+      
+      if(bcc2 == auxBuffer[length-1] && bcc1 == (addressField^controlByte) && (controlByte == CONTROL_BYTE_0 || controlByte == CONTROL_BYTE_1)){
+      //if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
         if(controlByte == CONTROL_BYTE_0){
           printf("Frame has 0 as sequence number\n");
           unsigned char frameToSend[5];
@@ -495,11 +531,11 @@ int llread(int fd,unsigned char* buffer){
         return 0;
       }
       else{
-        for (size_t i = 4; i < originalFrameIndex-1; i++)
+        /*for (size_t i = 4; i < originalFrameIndex-1; i++)
         {
           buffer[buffIndex] = originalFrame[i];
           buffIndex++;
-        }
+        }*/
         if(controlByte == CONTROL_BYTE_0){
           printf("Frame has 0 as sequence number\n");
           unsigned char frameToSend[5];
