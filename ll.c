@@ -332,7 +332,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
         disableAlarm();
         info.alarmFlag = 1;
-        info.numTries++;
+        //info.numTries++;
       }
 
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
@@ -445,12 +445,12 @@ int llread(int fd,unsigned char* buffer){
   int buffIndex = 0;
   info.numTries = 0;
   while(received == 0){
-    initializeAlarm(15);
+    //initializeAlarm(15);
     length = readTransmitterFrame(fd,auxBuffer);
     if(info.alarmFlag == 0){
       printf("Received frame\n");
     }
-    disableAlarm();
+    //disableAlarm();
     if(length > 0){
       unsigned char originalFrame[2*length+7];
       //destuffing

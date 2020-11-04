@@ -253,7 +253,7 @@ int receiveFile(){
         if(returnValue != 0){
             if(buffer[0] == DATA_FLAG){
                 currentSequenceNumber = (int)(buffer[1]);
-                if(lastSequenceNumber >= currentSequenceNumber && lastSequenceNumber != 255)
+                if(lastSequenceNumber >= currentSequenceNumber && lastSequenceNumber != 254)
                     continue;
                 lastSequenceNumber = currentSequenceNumber;
                 processDataPackets(buffer);
