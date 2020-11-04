@@ -3,18 +3,62 @@
 
 ConnectionInfo info;
 
+speed_t checkBaudrate(char * baudRate){
+    long br = strtol(baudRate, NULL, 16);
+    switch (br){
+        case 0xB50:
+            return B50;
+        case 0xB75:
+            return B75;
+        case 0xB110:
+            return B110;
+        case 0xB134:
+            return B134;
+        case 0xB150:
+            return B150;
+        case 0xB200:
+            return B200;
+        case 0xB300:
+            return B300;
+        case 0xB600:
+            return B600;
+        case 0xB1200:
+            return B1200;
+        case 0xB1800:
+            return B1800;
+        case 0xB2400:
+            return B2400;
+        case 0xB4800:
+            return B4800;
+        case 0xB9600:
+            return B9600;
+        case 0xB19200:
+            return B19200;
+        case 0xB38400:
+            return B38400;
+        case 0xB57600:
+            return B57600;
+        case 0xB115200:
+            return B115200;
+        case 0xB230400:
+            return B230400;
+        default:
+          return B38400;
+    }
+}
 
-void infoSetup(){
+void infoSetup(char * baudRate){
     info.alarmFlag = 0;
     info.numTries = 0;
-    info.ns = 0;    
+    info.ns = 0;
+    info.baudRate = checkBaudrate(baudRate); 
+    info.firstTime = 1;
 }
 
 
 int verifyControlByte(unsigned char byte){
   return byte == CONTROL_BYTE_SET || byte == CONTROL_BYTE_DISC || byte == CONTROL_BYTE_UA || byte == CONTROL_BYTE_RR0 || byte == CONTROL_BYTE_RR1 || byte == CONTROL_BYTE_REJ0 || byte == CONTROL_BYTE_REJ1;
 }
-
 
 void responseStateMachine(enum state* currentState, unsigned char byte, unsigned char* controlByte){
     switch(*currentState){
@@ -106,7 +150,7 @@ int llopen(char *port,int flag){
     }
 
     bzero(&info.newtio, sizeof(info.newtio));
-    info.newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    info.newtio.c_cflag = info.baudRate | CS8 | CLOCAL | CREAD;
     info.newtio.c_iflag = IGNPAR;
     info.newtio.c_oflag = 0;
 
@@ -116,6 +160,8 @@ int llopen(char *port,int flag){
     info.newtio.c_cc[VTIME] = 10;   /* inter-unsigned character timer unused */
     info.newtio.c_cc[VMIN] = 1;   /* blocking read until 5 unsigned chars received */
 
+    cfsetspeed(&info.newtio,info.baudRate);
+
     tcflush(fd, TCIOFLUSH);
 
     if (tcsetattr(fd,TCSANOW,&info.newtio) == -1) {
@@ -123,7 +169,6 @@ int llopen(char *port,int flag){
         exit(-1);
     }
 
-    infoSetup();
     printf("New termios structure set\n");
 
     //First frames' transmission
@@ -138,11 +183,11 @@ int llopen(char *port,int flag){
        write(fd,controlFrame,5);  //write SET
        printf("Sent SET\n");  
        info.alarmFlag = 0;
-       initializeAlarm();
-       readReceiverResponse(fd);
+       initializeAlarm(20);
+       readReceiverResponse(fd);  //read UA
        if(info.alarmFlag == 0){
          printf("Received UA\n");
-       }                    //read UA
+       }                    
       } while(info.numTries < MAX_TRIES && info.alarmFlag);
 
       disableAlarm();
@@ -155,7 +200,7 @@ int llopen(char *port,int flag){
 
     else if(flag == RECEIVER){
       do{
-        initializeAlarm();
+        initializeAlarm(15);
         info.alarmFlag = 0;
         readTransmitterResponse(fd);
         if(info.alarmFlag == 0){
@@ -227,13 +272,14 @@ int processControlByte(int fd, unsigned char *controlByte){
 int llwrite(int fd, unsigned char* buffer, int length){
     int unsigned charactersWritten = 0;
     unsigned char controlByte;
-    if(info.ns == 1)
-      info.ns = 0;
-    else if(info.ns == 0)
+    info.numTries = 0;
+    if(info.ns == 0 && !info.firstTime)
       info.ns = 1;
+    else if(info.ns == 1)
+      info.ns = 0;
     do{
       //write frame
-      unsigned char frameToSend[2*length+6];
+      unsigned char frameToSend[2*length+7];
       int frameIndex = 4, frameLength = 0;
       unsigned char bcc2 = 0x00;
 
@@ -279,8 +325,8 @@ int llwrite(int fd, unsigned char* buffer, int length){
       charactersWritten = write(fd,frameToSend,frameLength);
 
       printf("Sent frame with sequence number %d\n",info.ns);
-      //info.alarmFlag = 0;
-      initializeAlarm();
+
+      initializeAlarm(20);
       
       //read receiver response
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
@@ -290,14 +336,13 @@ int llwrite(int fd, unsigned char* buffer, int length){
       }
 
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
-
+    info.firstTime = 0;
     disableAlarm();
     
     if(info.numTries >= MAX_TRIES){
         printf("Exceeded number of maximum tries!\n");
         return -1;
     }
-    info.numTries = 0;
 
     return charactersWritten; 
 }
@@ -350,7 +395,7 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
 
 
 int readTransmitterFrame(int fd, unsigned char * buffer){
-    int lenght = 0;
+    int length = 0;
     unsigned char byte;
     unsigned char controlByte;
     enum state state = START;
@@ -359,10 +404,10 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
           perror("Error reading byte");
       }
       informationFrameStateMachine(&state,byte,&controlByte);
-      buffer[lenght] = byte;
-      lenght++;
+      buffer[length] = byte;
+      length++;
     }
-    return lenght;
+    return length;
 }
 
 int verifyFrame(unsigned char* frame,int length){
@@ -396,17 +441,18 @@ int llread(int fd,unsigned char* buffer){
   int received = 0;
   int length = 0;
   unsigned char controlByte;
-  unsigned char auxBuffer[131083];
+  unsigned char auxBuffer[131087];
   int buffIndex = 0;
+  info.numTries = 0;
   while(received == 0){
-    initializeAlarm();
+    initializeAlarm(15);
     length = readTransmitterFrame(fd,auxBuffer);
     if(info.alarmFlag == 0){
       printf("Received frame\n");
     }
     disableAlarm();
     if(length > 0){
-      unsigned char originalFrame[2*length+6];
+      unsigned char originalFrame[2*length+7];
       //destuffing
       
       originalFrame[0] = auxBuffer[0];
@@ -518,7 +564,7 @@ int llclose(int fd, int flag){
             write(fd,controlFrameDISC,5);  //write DISC 
             printf("Sent DISC\n");
             info.alarmFlag = 0;
-            initializeAlarm();
+            initializeAlarm(20);
             readReceiverResponse(fd);  //read DISC
         } while(info.numTries < MAX_TRIES && info.alarmFlag);
 
@@ -552,7 +598,7 @@ int llclose(int fd, int flag){
         }
 
         do{
-          initializeAlarm();
+          initializeAlarm(15);
           readTransmitterResponse(fd);
         }while(info.numTries < MAX_TRIES && info.alarmFlag == 1);  
         
@@ -578,7 +624,7 @@ int llclose(int fd, int flag){
         printf("Sent DISC\n");
 
         do{
-          initializeAlarm();
+          initializeAlarm(15);
           readTransmitterResponse(fd);
         }while(info.numTries < MAX_TRIES && info.alarmFlag == 1);  
         

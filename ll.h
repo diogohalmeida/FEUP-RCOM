@@ -7,7 +7,8 @@
 
 
 //ConnectionInfo struct setup
-void infoSetup();
+speed_t checkBaudrate(char * baudRate);
+void infoSetup(char * baudRate);
 
 //Auxiliary functions
 int verifyControlByte(unsigned char byte);

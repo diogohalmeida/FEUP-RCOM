@@ -37,5 +37,5 @@ int processDataPackets(unsigned char* packet);
 
 void checkControlPacketInformation(unsigned char* packet);
 
-int receiveFile(int fdPort);
+int receiveFile();
 

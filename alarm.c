@@ -6,7 +6,7 @@ void sigAlarmHandler(){
   info.numTries++;
 }
 
-void initializeAlarm(){
+void initializeAlarm(int seconds){
   struct sigaction sa;
 	sa.sa_handler = &sigAlarmHandler;
 	sigemptyset(&sa.sa_mask);
@@ -15,7 +15,7 @@ void initializeAlarm(){
 
 	sigaction(SIGALRM, &sa, NULL);
 
-  alarm(3); // need to define a macro for the time of the alarm
+  alarm(seconds); 
 
 }
 

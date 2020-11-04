@@ -42,6 +42,8 @@ typedef struct {
     int numTries;
     int alarmFlag;
     int ns;
+    speed_t baudRate;
+    int firstTime;
     
     //struct termios
     struct termios oldtio, newtio;

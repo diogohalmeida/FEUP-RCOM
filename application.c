@@ -239,12 +239,12 @@ int processDataPackets(unsigned char* packet){
     return 0;
 }
 
-int receiveFile(int fdPort){
+int receiveFile(){
     unsigned char buffer[app.packetSize+4];
     int stop = 0;
     int returnValue;
-
-    app.fdPort = fdPort;
+    int lastSequenceNumber = -1;
+    int currentSequenceNumber;
 
     readControlPacket();
 
@@ -252,6 +252,10 @@ int receiveFile(int fdPort){
         returnValue = llread(app.fdPort,buffer);
         if(returnValue != 0){
             if(buffer[0] == DATA_FLAG){
+                currentSequenceNumber = (int)(buffer[1]);
+                if(lastSequenceNumber >= currentSequenceNumber && lastSequenceNumber != 255)
+                    continue;
+                lastSequenceNumber = currentSequenceNumber;
                 processDataPackets(buffer);
             }
             else if(buffer[0] == END_FLAG){
