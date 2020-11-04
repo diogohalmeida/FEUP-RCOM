@@ -1,5 +1,5 @@
 #include "application.h"
-#include <time.h>
+#include <sys/time.h>
 
 int main(int argc, char** argv)
 {
@@ -41,10 +41,11 @@ int main(int argc, char** argv)
       return -2;
     }
 
-    clock_t start, end;
-    double cpu_time_used;
+    struct timeval start, end;
+    double time_taken;
 
-    start = clock();
+
+    gettimeofday(&start, NULL);
 
     fd = llopen(argv[1],flag);
 
@@ -62,10 +63,12 @@ int main(int argc, char** argv)
       llclose(fd,flag);
     }
 
-    end = clock();
-    cpu_time_used = ((double)(end-start))/CLOCKS_PER_SEC;
+    gettimeofday(&end, NULL);
+    
+    time_taken = end.tv_sec + end.tv_usec / 1e6 -
+                      start.tv_sec - start.tv_usec / 1e6; // in seconds
 
-    printf("Time spent: %lf",cpu_time_used);
+    printf("Time spent: %lf\n",time_taken);
     
     return 0;
 }
