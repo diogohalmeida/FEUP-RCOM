@@ -66,7 +66,7 @@ int main(int argc, char** argv)
     gettimeofday(&end, NULL);
     
     time_taken = end.tv_sec + end.tv_usec / 1e6 -
-                      start.tv_sec - start.tv_usec / 1e6; // in seconds
+                  start.tv_sec - start.tv_usec / 1e6; // in seconds
 
     printf("Time spent: %lf\n",time_taken);
     

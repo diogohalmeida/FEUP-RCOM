@@ -183,7 +183,7 @@ int llopen(char *port,int flag){
        write(fd,controlFrame,5);  //write SET
        printf("Sent SET\n");  
        info.alarmFlag = 0;
-       initializeAlarm(20);
+       initializeAlarm();
        readReceiverResponse(fd);  //read UA
        if(info.alarmFlag == 0){
          printf("Received UA\n");
@@ -199,22 +199,8 @@ int llopen(char *port,int flag){
     }
 
     else if(flag == RECEIVER){
-      do{
-        initializeAlarm(15);
-        info.alarmFlag = 0;
-        readTransmitterResponse(fd);
-        if(info.alarmFlag == 0){
-          printf("Received SET\n");
-        }
-      }
-      while(info.alarmFlag == 1 && info.numTries < MAX_TRIES);
-        
-      disableAlarm();
-
-      if(info.numTries >= MAX_TRIES){
-        printf("Exceeded number of maximum tries!\n");
-        return -2;
-      }
+      readTransmitterResponse(fd);
+      printf("Received SET\n");
 
       unsigned char controlFrame[5];
       controlFrame[0] = FLAG;
@@ -230,7 +216,7 @@ int llopen(char *port,int flag){
         printf("Unknown function, must be a TRANSMITTER/RECEIVER\n");
         return 1;
     }
-    info.numTries = 0;
+
     return fd;
 }
 
@@ -326,13 +312,12 @@ int llwrite(int fd, unsigned char* buffer, int length){
 
       printf("Sent frame with sequence number %d\n",info.ns);
 
-      initializeAlarm(20);
+      initializeAlarm();
       
       //read receiver response
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
         disableAlarm();
         info.alarmFlag = 1;
-        //info.numTries++;
       }
 
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
@@ -399,7 +384,7 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     unsigned char byte;
     unsigned char controlByte;
     enum state state = START;
-    while(state != STOP && info.alarmFlag == 0){
+    while(state != STOP){
       if(read(fd,&byte,1) < 0){
           perror("Error reading byte");
       }
@@ -445,12 +430,9 @@ int llread(int fd,unsigned char* buffer){
   int buffIndex = 0;
   info.numTries = 0;
   while(received == 0){
-    //initializeAlarm(15);
     length = readTransmitterFrame(fd,auxBuffer);
-    if(info.alarmFlag == 0){
-      printf("Received frame\n");
-    }
-    //disableAlarm();
+    printf("Received frame\n");
+
     if(length > 0){
       unsigned char originalFrame[2*length+7];
       //destuffing
@@ -564,7 +546,7 @@ int llclose(int fd, int flag){
             write(fd,controlFrameDISC,5);  //write DISC 
             printf("Sent DISC\n");
             info.alarmFlag = 0;
-            initializeAlarm(20);
+            initializeAlarm();
             readReceiverResponse(fd);  //read DISC
         } while(info.numTries < MAX_TRIES && info.alarmFlag);
 
@@ -597,21 +579,8 @@ int llclose(int fd, int flag){
             return -1;
         }
 
-        do{
-          initializeAlarm(15);
-          readTransmitterResponse(fd);
-        }while(info.numTries < MAX_TRIES && info.alarmFlag == 1);  
-        
-        if(info.alarmFlag == 0){
-          printf("Receveid DISC\n");
-        }  
-
-        disableAlarm();
-
-        if(info.numTries >= MAX_TRIES){
-            printf("Exceeded number of maximum tries!\n");
-            return -1;
-        }
+        readTransmitterResponse(fd); 
+        printf("Receveid DISC\n"); 
 
         unsigned char controlFrame[5];
         controlFrame[0] = FLAG;
@@ -623,20 +592,9 @@ int llclose(int fd, int flag){
         write(fd,controlFrame,5);  //send DISC
         printf("Sent DISC\n");
 
-        do{
-          initializeAlarm(15);
-          readTransmitterResponse(fd);
-        }while(info.numTries < MAX_TRIES && info.alarmFlag == 1);  
-        
-        if(info.alarmFlag == 0){
-          printf("Received UA\n");
-        }  
-        disableAlarm();
+        readTransmitterResponse(fd); 
+        printf("Received UA\n");
 
-        if(info.numTries >= MAX_TRIES){
-            printf("Exceeded number of maximum tries!\n");
-            return -1;
-        }
     }
 
     else{

@@ -143,14 +143,11 @@ int sendFile(){
 }
 
 
-int readControlPacket(){
-    unsigned char packet[app.packetSize];
+int readStartControlPacket(unsigned char * packet){
     int packetIndex = 1;
     int fileNameLength = 0;
     int fileSize = 0;
     char* fileName;
-
-    llread(app.fdPort,packet);
 
 
     if(packet[packetIndex] == FILE_NAME_FLAG){              //flag do nome do ficheiro
@@ -190,7 +187,7 @@ int readControlPacket(){
     return 0;
 }
 
-void checkControlPacketInformation(unsigned char* packet){
+void readEndControlPacket(unsigned char* packet){
     int packetIndex = 1;
     int fileNameLength = 0;
     int fileSize = 0;
@@ -242,29 +239,24 @@ int processDataPackets(unsigned char* packet){
 int receiveFile(){
     unsigned char buffer[app.packetSize+4];
     int stop = 0;
-    int returnValue;
     int lastSequenceNumber = -1;
     int currentSequenceNumber;
 
-    readControlPacket();
 
     while(!stop){
-        returnValue = llread(app.fdPort,buffer);
-        if(returnValue != 0){
-            if(buffer[0] == DATA_FLAG){
-                currentSequenceNumber = (int)(buffer[1]);
-                if(lastSequenceNumber >= currentSequenceNumber && lastSequenceNumber != 254)
-                    continue;
-                lastSequenceNumber = currentSequenceNumber;
-                processDataPackets(buffer);
-            }
-            else if(buffer[0] == END_FLAG){
-                checkControlPacketInformation(buffer);
-                stop = 1;
-            }
+        llread(app.fdPort,buffer);
+        if(buffer[0] == START_FLAG){
+            readStartControlPacket(buffer);
         }
-        else if(returnValue == 0 && info.numTries >= MAX_TRIES){
-            info.alarmFlag = 1;
+        else if(buffer[0] == DATA_FLAG){
+            currentSequenceNumber = (int)(buffer[1]);
+            if(lastSequenceNumber >= currentSequenceNumber && lastSequenceNumber != 254)
+                continue;
+            lastSequenceNumber = currentSequenceNumber;
+            processDataPackets(buffer);
+        }
+        else if(buffer[0] == END_FLAG){
+            readEndControlPacket(buffer);
             stop = 1;
         }
     }
