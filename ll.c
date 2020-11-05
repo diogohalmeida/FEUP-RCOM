@@ -208,7 +208,7 @@ int llopen(char *port,int flag, char* baudrate){
         exit(-1);
     }
 
-    printf("New termios structure set\n");
+    printf("New termios structure set with baudrate: IN: %d | OUT: %d\n", newtio.c_ispeed, newtio.c_ospeed);
 
     //First frames' transmission
     if(flag == TRANSMITTER){
@@ -347,9 +347,9 @@ int llwrite(int fd, unsigned char* buffer, int length){
       frameToSend[frameIndex] = FLAG;
 
       frameLength = frameIndex+1;
+      printf("Before writing to serial...\n");
       charactersWritten = write(fd,frameToSend,frameLength);
-
-      printf("Sent frame with sequence number %d\n",info.ns);
+      printf("Sent frame with sequence number %d\n\n",info.ns);
 
       initializeAlarm();
       
