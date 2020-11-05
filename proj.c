@@ -47,6 +47,7 @@ int main(int argc, char** argv)
 
     gettimeofday(&start, NULL);
 
+
     fd = llopen(argv[1],flag);
 
     applicationSetUp(argv[3],packetSize,fd);

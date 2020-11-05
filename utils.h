@@ -46,7 +46,7 @@ typedef struct {
     int firstTime;
     
     //struct termios
-    struct termios oldtio, newtio;
+    //struct termios oldtio, newtio;
 
 }   ConnectionInfo;
 

@@ -3,6 +3,8 @@
 
 ConnectionInfo info;
 
+struct termios oldtio;
+
 speed_t checkBaudrate(char * baudRate){
     long br = strtol(baudRate, NULL, 16);
     switch (br){
@@ -129,7 +131,7 @@ void readTransmitterResponse(int fd){
   unsigned char byte;
   enum state state = START;
   unsigned char controlByte;
-  while(state != STOP && info.alarmFlag == 0){
+  while(state != STOP){
     if(read(fd,&byte,1) < 0){
       perror("Error reading byte of the transmitter response");
     }
@@ -140,31 +142,36 @@ void readTransmitterResponse(int fd){
 
 int llopen(char *port,int flag){
     //Open the connection
+    struct termios newtio;
     int fd;
-    fd = open(port, O_RDWR | O_NOCTTY );
-    if (fd <0) {perror(port); exit(-1); }
 
-    if (tcgetattr(fd,&info.oldtio) == -1) { /* save current port settings */
+    fd = open(port, O_RDWR | O_NOCTTY);
+    if(fd == -1){
+        perror("Port error");
+        exit(-1);
+    }
+
+    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
         perror("tcgetattr");
         exit(-1);
     }
 
-    bzero(&info.newtio, sizeof(info.newtio));
-    info.newtio.c_cflag = info.baudRate | CS8 | CLOCAL | CREAD;
-    info.newtio.c_iflag = IGNPAR;
-    info.newtio.c_oflag = 0;
+    bzero(&newtio, sizeof(newtio));
+    newtio.c_cflag = info.baudRate | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
 
     /* set input mode (non-canonical, no echo,...) */
-    info.newtio.c_lflag = 0;
+    newtio.c_lflag = 0;
 
-    info.newtio.c_cc[VTIME] = 10;   /* inter-unsigned character timer unused */
-    info.newtio.c_cc[VMIN] = 1;   /* blocking read until 5 unsigned chars received */
+    newtio.c_cc[VTIME] = 10;   /* inter-character timer unused */
+    newtio.c_cc[VMIN] = 1;   /* blocking read until 5 chars received */
 
-    cfsetspeed(&info.newtio,info.baudRate);
+    cfsetspeed(&newtio,info.baudRate);
 
     tcflush(fd, TCIOFLUSH);
 
-    if (tcsetattr(fd,TCSANOW,&info.newtio) == -1) {
+    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
         perror("tcsetattr");
         exit(-1);
     }
@@ -263,8 +270,10 @@ int llwrite(int fd, unsigned char* buffer, int length){
       info.ns = 1;
     else if(info.ns == 1)
       info.ns = 0;
+    printf("%d\n",length);
     do{
       //write frame
+
       unsigned char frameToSend[2*length+7];
       int frameIndex = 4, frameLength = 0;
       unsigned char bcc2 = 0x00;
@@ -274,7 +283,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
       frameToSend[1] = ADDRESS_FIELD_CMD;    //UA
       if(info.ns == 0)
         frameToSend[2] = CONTROL_BYTE_0;
-      else
+      else if(info.ns == 1)
       {
         frameToSend[2] = CONTROL_BYTE_1;
       }
@@ -308,18 +317,20 @@ int llwrite(int fd, unsigned char* buffer, int length){
       frameToSend[frameIndex] = FLAG;
 
       frameLength = frameIndex+1;
+      printf("Antes\n");
       charactersWritten = write(fd,frameToSend,frameLength);
-
+      printf("Depois\n");
       printf("Sent frame with sequence number %d\n",info.ns);
 
       initializeAlarm();
       
       //read receiver response
+      printf("Antes do process\n");
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
         disableAlarm();
         info.alarmFlag = 1;
       }
-
+      printf("Depois do process\n");
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
     info.firstTime = 0;
     disableAlarm();
@@ -341,7 +352,9 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
         case FLAG_RCV:
             if(byte == ADDRESS_FIELD_CMD)   //acknowlegement
                 *currentState = A_RCV;
-            else if(byte != FLAG)
+            else if(byte == FLAG)
+              break;
+            else
                 *currentState = START;
             break;
         case A_RCV:
@@ -349,7 +362,7 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
               *currentState = C_RCV;
               *controlByte = byte;
             }
-            else if(FLAG == 0x7E){
+            else if(byte == FLAG){
                 *currentState = FLAG_RCV;
             }
             else{
@@ -370,11 +383,14 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
               *currentState = DATA_RCV;
             break;
         case DATA_RCV:
-            if(byte == FLAG)
+            if(byte == FLAG){
               *currentState = STOP;
+            }
             break;
         case STOP:
             break;
+        default:
+          break;
     }
 }
 
@@ -386,11 +402,12 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     enum state state = START;
     int count = 0;
     int escapeByteFound = 0;
-
+    printf("Antes\n");
     while(state != STOP){
-      if(read(fd,&byte,1) < 0){
+      /*if(read(fd,&byte,1) < 0){
           perror("Error reading byte");
-      }
+      }*/
+      read(fd, &byte, 1);
       informationFrameStateMachine(&state,byte,&controlByte);
       count++;
       if(count > 4 && byte != FLAG){
@@ -418,6 +435,7 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
         length++;
       }
     }
+    printf("Depois\n");
     return length;
 }
 
@@ -458,7 +476,9 @@ int llread(int fd,unsigned char* buffer){
   unsigned char bcc2 = 0x00;
   unsigned char addressField;
   while(received == 0){
+    
     length = readTransmitterFrame(fd,auxBuffer);
+    
     printf("Received frame\n");
 
     if(length > 0){
@@ -496,12 +516,14 @@ int llread(int fd,unsigned char* buffer){
       }
       originalFrame[originalFrameIndex] = auxBuffer[length-1];
       controlByte = originalFrame[2];*/
-      controlByte = auxBuffer[2];
       addressField = auxBuffer[1];
+      controlByte = auxBuffer[2];
       bcc1 = auxBuffer[3];
       for (size_t i = 4; i < length-2; i++)
       {
         bcc2 ^= auxBuffer[i];
+        buffer[buffIndex] = auxBuffer[i];
+        buffIndex++;
       }
       
       if(bcc2 == auxBuffer[length-1] && bcc1 == (addressField^controlByte) && (controlByte == CONTROL_BYTE_0 || controlByte == CONTROL_BYTE_1)){
@@ -641,7 +663,7 @@ int llclose(int fd, int flag){
 
     tcflush(fd, TCIOFLUSH);
 
-	if (tcsetattr(fd, TCSANOW, &info.oldtio) == -1) {
+	if (tcsetattr(fd, TCSANOW, &oldtio) == -1) {
 		perror("tcsetattr");
 		exit(-1);
 	}
