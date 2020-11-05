@@ -47,12 +47,9 @@ int main(int argc, char** argv)
 
     gettimeofday(&start, NULL);
 
-
-    fd = llopen(argv[1],flag);
+    fd = llopen(argv[1],flag, argv[5]);
 
     applicationSetUp(argv[3],packetSize,fd);
-
-    infoSetup(argv[5]);
 
     if(fd > 0){
       if(flag == RECEIVER){

@@ -35,19 +35,3 @@
 #define MAX_TRIES 3
 
 enum state{START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP, DATA_RCV};
-
-
-typedef struct {
-    //alarm info
-    int numTries;
-    int alarmFlag;
-    int ns;
-    speed_t baudRate;
-    int firstTime;
-    
-    //struct termios
-    //struct termios oldtio, newtio;
-
-}   ConnectionInfo;
-
-extern ConnectionInfo info;

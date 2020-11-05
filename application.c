@@ -9,7 +9,6 @@ void applicationSetUp(char * fileName, int packetSize, int fdPort){
     app.fileName = fileName;
     app.packetSize = packetSize;
     app.fdPort = fdPort;
-
 }
 
 int readFileInformation(char* fileName){
@@ -30,7 +29,6 @@ int readFileInformation(char* fileName){
     app.fdFile = fd;
     app.fileName = fileName;
     app.fileSize = status.st_size;
-    printf("File size: %ld\n",status.st_size);
 
     return 0;
 }
@@ -74,7 +72,7 @@ int sendControlPacket(unsigned char controlByte){
 
     packet[packetIndex] = app.fileSize & BYTE_MASK;
     packetIndex++;
-
+    
     if(llwrite(app.fdPort,packet,packetIndex) < packetIndex){
         printf("Error writing control packet to serial port!\n");
         return -1;
@@ -108,7 +106,7 @@ int sendDataPacket(){
         packet[3] = bytesRead % 256;
         memcpy(&packet[4],buffer,bytesRead);
         length = bytesRead + 4;
-        printf("Bytes read: %d\n",bytesRead);
+
         if(llwrite(app.fdPort,packet,length) < length){
             printf("Error writing data packet to serial port!\n");
             return -1;

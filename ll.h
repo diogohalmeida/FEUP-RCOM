@@ -1,4 +1,7 @@
-#include "alarm.h"
+#include "utils.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -25,7 +28,24 @@ void readTransmitterResponse(int fd);
 int readTransmitterFrame(int fd, unsigned char * buffer);
 
 // ll functions
-int llopen(char* port, int flag);
+int llopen(char* port, int flag, char* baudrate);
 int llwrite(int fd, unsigned char* packet, int length);
 int llread(int fd, unsigned char* buf);
 int llclose(int fd, int flag);
+
+void sigAlarmHandler();
+
+void initializeAlarm();
+
+void disableAlarm();
+
+
+typedef struct {
+    //alarm info
+    int numTries;
+    int alarmFlag;
+    int ns;
+    speed_t baudRate;
+    int firstTime;
+
+}   ConnectionInfo;

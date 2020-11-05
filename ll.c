@@ -3,7 +3,41 @@
 
 ConnectionInfo info;
 
+//struct termios
 struct termios oldtio;
+
+
+void sigAlarmHandler(){
+  printf("Timeout!\n");
+  info.alarmFlag = 1;
+  info.numTries++;
+}
+
+void initializeAlarm(){
+  struct sigaction sa;
+	sa.sa_handler = &sigAlarmHandler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+  info.alarmFlag = 0;
+
+	sigaction(SIGALRM, &sa, NULL);
+
+  alarm(20); 
+
+}
+
+void disableAlarm(){
+  struct sigaction sa;
+	sa.sa_handler = NULL;
+
+  sigaction(SIGALRM, &sa, NULL);
+
+  info.alarmFlag = 0;
+
+  alarm(0);
+}
+
+
 
 speed_t checkBaudrate(char * baudRate){
     long br = strtol(baudRate, NULL, 16);
@@ -131,7 +165,7 @@ void readTransmitterResponse(int fd){
   unsigned char byte;
   enum state state = START;
   unsigned char controlByte;
-  while(state != STOP){
+  while(state != STOP && info.alarmFlag == 0){
     if(read(fd,&byte,1) < 0){
       perror("Error reading byte of the transmitter response");
     }
@@ -140,18 +174,16 @@ void readTransmitterResponse(int fd){
 }
 
 
-int llopen(char *port,int flag){
-    //Open the connection
+int llopen(char *port,int flag, char* baudrate){
     struct termios newtio;
+    infoSetup(baudrate);
+    printf("BAUD: %d\n", info.baudRate);
+    //Open the connection
     int fd;
+    fd = open(port, O_RDWR | O_NOCTTY );
+    if (fd <0) {perror(port); exit(-1); }
 
-    fd = open(port, O_RDWR | O_NOCTTY);
-    if(fd == -1){
-        perror("Port error");
-        exit(-1);
-    }
-
-    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+    if (tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
         perror("tcgetattr");
         exit(-1);
     }
@@ -164,8 +196,8 @@ int llopen(char *port,int flag){
     /* set input mode (non-canonical, no echo,...) */
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME] = 10;   /* inter-character timer unused */
-    newtio.c_cc[VMIN] = 1;   /* blocking read until 5 chars received */
+    newtio.c_cc[VTIME] = 10;   /* inter-unsigned character timer unused */
+    newtio.c_cc[VMIN] = 1;   /* blocking read until 5 unsigned chars received */
 
     cfsetspeed(&newtio,info.baudRate);
 
@@ -270,10 +302,8 @@ int llwrite(int fd, unsigned char* buffer, int length){
       info.ns = 1;
     else if(info.ns == 1)
       info.ns = 0;
-    printf("%d\n",length);
     do{
       //write frame
-
       unsigned char frameToSend[2*length+7];
       int frameIndex = 4, frameLength = 0;
       unsigned char bcc2 = 0x00;
@@ -283,7 +313,7 @@ int llwrite(int fd, unsigned char* buffer, int length){
       frameToSend[1] = ADDRESS_FIELD_CMD;    //UA
       if(info.ns == 0)
         frameToSend[2] = CONTROL_BYTE_0;
-      else if(info.ns == 1)
+      else
       {
         frameToSend[2] = CONTROL_BYTE_1;
       }
@@ -317,20 +347,18 @@ int llwrite(int fd, unsigned char* buffer, int length){
       frameToSend[frameIndex] = FLAG;
 
       frameLength = frameIndex+1;
-      printf("Antes\n");
       charactersWritten = write(fd,frameToSend,frameLength);
-      printf("Depois\n");
+
       printf("Sent frame with sequence number %d\n",info.ns);
 
       initializeAlarm();
       
       //read receiver response
-      printf("Antes do process\n");
       if(processControlByte(fd,&controlByte) == -1){  // if there is an error sending the message, send again 
         disableAlarm();
         info.alarmFlag = 1;
       }
-      printf("Depois do process\n");
+
     }while(info.numTries < MAX_TRIES && info.alarmFlag);
     info.firstTime = 0;
     disableAlarm();
@@ -352,9 +380,7 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
         case FLAG_RCV:
             if(byte == ADDRESS_FIELD_CMD)   //acknowlegement
                 *currentState = A_RCV;
-            else if(byte == FLAG)
-              break;
-            else
+            else if(byte != FLAG)
                 *currentState = START;
             break;
         case A_RCV:
@@ -362,7 +388,7 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
               *currentState = C_RCV;
               *controlByte = byte;
             }
-            else if(byte == FLAG){
+            else if(FLAG == 0x7E){
                 *currentState = FLAG_RCV;
             }
             else{
@@ -383,14 +409,11 @@ void informationFrameStateMachine(enum state* currentState, unsigned char byte, 
               *currentState = DATA_RCV;
             break;
         case DATA_RCV:
-            if(byte == FLAG){
+            if(byte == FLAG)
               *currentState = STOP;
-            }
             break;
         case STOP:
             break;
-        default:
-          break;
     }
 }
 
@@ -400,42 +423,14 @@ int readTransmitterFrame(int fd, unsigned char * buffer){
     unsigned char byte;
     unsigned char controlByte;
     enum state state = START;
-    int count = 0;
-    int escapeByteFound = 0;
-    printf("Antes\n");
     while(state != STOP){
-      /*if(read(fd,&byte,1) < 0){
+      if(read(fd,&byte,1) < 0){
           perror("Error reading byte");
-      }*/
-      read(fd, &byte, 1);
+      }
       informationFrameStateMachine(&state,byte,&controlByte);
-      count++;
-      if(count > 4 && byte != FLAG){
-        if(byte == ESC_BYTE){
-          escapeByteFound = 1;
-          continue;
-        }
-        else if(byte == (FLAG^STUFFING_BYTE) && escapeByteFound == 1){
-          buffer[length] = FLAG;
-          length++;
-          escapeByteFound = 0;
-        }
-        else if(byte == (ESC_BYTE^STUFFING_BYTE) && escapeByteFound == 1){
-          buffer[length] = ESC_BYTE;
-          length++;
-          escapeByteFound = 0;
-        }
-        else{
-          buffer[length] = byte;
-          length++;
-        }
-      }
-      else{
-        buffer[length] = byte;
-        length++;
-      }
+      buffer[length] = byte;
+      length++;
     }
-    printf("Depois\n");
     return length;
 }
 
@@ -471,21 +466,17 @@ int llread(int fd,unsigned char* buffer){
   int length = 0;
   unsigned char controlByte;
   unsigned char auxBuffer[131087];
-  unsigned char bcc1;
   int buffIndex = 0;
-  unsigned char bcc2 = 0x00;
-  unsigned char addressField;
+  info.numTries = 0;
   while(received == 0){
-    
     length = readTransmitterFrame(fd,auxBuffer);
-    
     printf("Received frame\n");
 
     if(length > 0){
-      //unsigned char originalFrame[2*length+7];
+      unsigned char originalFrame[2*length+7];
       //destuffing
       
-      /*originalFrame[0] = auxBuffer[0];
+      originalFrame[0] = auxBuffer[0];
       originalFrame[1] = auxBuffer[1];
       originalFrame[2] = auxBuffer[2];
       originalFrame[3] = auxBuffer[3];
@@ -515,19 +506,9 @@ int llread(int fd,unsigned char* buffer){
         }
       }
       originalFrame[originalFrameIndex] = auxBuffer[length-1];
-      controlByte = originalFrame[2];*/
-      addressField = auxBuffer[1];
-      controlByte = auxBuffer[2];
-      bcc1 = auxBuffer[3];
-      for (size_t i = 4; i < length-2; i++)
-      {
-        bcc2 ^= auxBuffer[i];
-        buffer[buffIndex] = auxBuffer[i];
-        buffIndex++;
-      }
-      
-      if(bcc2 == auxBuffer[length-1] && bcc1 == (addressField^controlByte) && (controlByte == CONTROL_BYTE_0 || controlByte == CONTROL_BYTE_1)){
-      //if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
+      controlByte = originalFrame[2];
+
+      if(verifyFrame(originalFrame,originalFrameIndex+1) != 0){
         if(controlByte == CONTROL_BYTE_0){
           printf("Frame has 0 as sequence number\n");
           unsigned char frameToSend[5];
@@ -553,11 +534,11 @@ int llread(int fd,unsigned char* buffer){
         return 0;
       }
       else{
-        /*for (size_t i = 4; i < originalFrameIndex-1; i++)
+        for (size_t i = 4; i < originalFrameIndex-1; i++)
         {
           buffer[buffIndex] = originalFrame[i];
           buffIndex++;
-        }*/
+        }
         if(controlByte == CONTROL_BYTE_0){
           printf("Frame has 0 as sequence number\n");
           unsigned char frameToSend[5];
