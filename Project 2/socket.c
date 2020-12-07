@@ -22,3 +22,27 @@ int openSocket(char* ipAddress, int port){
 
 	return sockfd;
 }
+
+int writeCommandToSocket(int fdSocket,char* command){
+
+    int commandSize = strlen(command);
+    int bytesWritten;
+
+    if((bytesWritten = write(fdSocket,command,commandSize)) < commandSize){
+        perror("Error writing to socket\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int readSocketResponse(int fdSocket,char* response){
+    FILE* file = fdopen(fdSocket,"r");
+
+    if(fgets(response,1024,file) == NULL){
+        perror("Error reading response from socket!\n");
+        return -1;
+    }
+
+    return 0;
+}

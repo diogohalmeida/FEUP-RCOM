@@ -1,3 +1,3 @@
 #include "socket.h"
 
-int ftpStartConnection(char * ipAddress, int port);
+int ftpStartConnection(int* fdSocket, char * ipAddress, int port);

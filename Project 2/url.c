@@ -72,8 +72,8 @@ int parseUrlInfo(urlInfo* url, char * urlGiven){
     else{
         strcpy(urlPath,auxUrl);
 
-        strcpy(url->user,"rcom");
-        strcpy(url->password,"rcom");
+        strcpy(url->user,"anonymous");
+        strcpy(url->password,"anypassword");
     }
     
     
@@ -81,19 +81,27 @@ int parseUrlInfo(urlInfo* url, char * urlGiven){
     strcpy(url->host,getStringBeforeCharacther(urlPath,'/'));
 
     strcpy(urlPath,urlPath + strlen(url->host)+1);
-    int index;
+    int index = -1;
 
-    for (int i = strlen(urlPath)-1; i <= 0; i--)
+
+    for (int i = strlen(urlPath)-1; i >= 0; i--)
     {
+
         if(urlPath[i] == '/'){
             index = i;
+            printf("%d\n",index);
             break;
         }    
     }
 
-    strncpy(url->urlPath,urlPath,index+1);
-    strcpy(url->fileName,urlPath+index+2);
-    
+    strcpy(url->urlPath,urlPath);
+    if(index == -1){
+        strcpy(url->fileName,urlPath);
+    }
+    else
+    {
+        strcpy(url->fileName,urlPath+index+1);
+    }
 
     return 0;
 
