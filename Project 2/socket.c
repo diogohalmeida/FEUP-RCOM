@@ -29,7 +29,7 @@ int writeCommandToSocket(int fdSocket,char* command){
     int bytesWritten;
 
     if((bytesWritten = write(fdSocket,command,commandSize)) < commandSize){
-        perror("Error writing to socket\n");
+        perror("Error writing command to socket\n");
         return -1;
     }
 

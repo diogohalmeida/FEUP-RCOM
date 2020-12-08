@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <string.h>
 #include <strings.h>
+#include "url.h"
 
 int openSocket(char* ipAddress, int port);
 
