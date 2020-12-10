@@ -3,6 +3,7 @@
 int ftpStartConnection(int* fdSocket, urlInfo* url){
 
     char response[1024] = {0};
+    int code;
 
     if((*fdSocket = openSocket(url->ipAddress,url->port)) < 0){
         perror("Error opening socket!\n");
@@ -11,7 +12,12 @@ int ftpStartConnection(int* fdSocket, urlInfo* url){
 
     readSocketResponse(*fdSocket,response);
 
+    sscanf(response,"%d",&code);
+
     printf("Response: %s\n",response);
+
+    if(code != 220)
+        return -1;
 
     return 0;
 
@@ -22,6 +28,8 @@ int ftpLoginIn(urlInfo* url, int fdSocket){
     char passwordCommand[512] = {0};
     char responseToUserCommand[1024] = {0};
     char responseToPasswordCommand[1024] = {0};
+    int usernameCode;
+    int passwordCode;
 
     sprintf(userCommand,"user %s\n",url->user);
     sprintf(passwordCommand,"pass %s\n",url->password);
@@ -36,6 +44,12 @@ int ftpLoginIn(urlInfo* url, int fdSocket){
 
     printf("Response to the user: %s\n",responseToUserCommand);
 
+    sscanf(responseToUserCommand,"%d",&usernameCode);
+
+    if(usernameCode != 331){
+        return -1;
+    }
+
     if(writeCommandToSocket(fdSocket,passwordCommand) < 0){
         return -1;
     }
@@ -45,6 +59,12 @@ int ftpLoginIn(urlInfo* url, int fdSocket){
     }
 
     printf("Response to the password: %s\n",responseToPasswordCommand);
+
+    sscanf(responseToPasswordCommand,"%d",&passwordCode);
+
+    if(passwordCode != 230){
+        return -1;
+    }
 
     return 0;
 }
@@ -68,7 +88,12 @@ int ftpPassiveMode(urlInfo* url, int fdSocket, int* dataSocket){
 
     char serverIp[1024] = {0};
     int serverPort;
+    int code;
 
+    sscanf(responseToPassiveMode,"%d",&code);
+
+    if(code != 227)
+        return -1;
 
     sscanf(responseToPassiveMode,"227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)",&firstIpElement,&secondIpElement,&thirdIpElement,&fourthIpElement,&firstPortElement,&secondPortElement);
 
@@ -87,6 +112,7 @@ int ftpRetrieveFile(urlInfo* url, int fdSocket){
 
     char retrieveCommand[1024] = {0};
     char responseToRetrieve[1024] = {0};
+    int code;
 
     sprintf(retrieveCommand,"retr ./%s\n",url->urlPath);
 
@@ -100,6 +126,11 @@ int ftpRetrieveFile(urlInfo* url, int fdSocket){
     }
 
     printf("Response to Retrieve Command: %s\n",responseToRetrieve);
+
+    sscanf(responseToRetrieve,"%d",&code);
+
+    if(code != 150)
+        return -1;
 
     return 0;
 }

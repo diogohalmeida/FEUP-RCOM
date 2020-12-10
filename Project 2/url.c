@@ -62,12 +62,24 @@ int parseUrlInfo(urlInfo* url, char * urlGiven){
     if(userNameGiven != NULL){
         strcpy(urlPath,userNameGiven+1);
         
-        strcpy(url->user,getStringBeforeCharacther(auxUrl,':'));
+        if(strchr(auxUrl,':') == NULL){
+            char* aux;
+            strcpy(url->user,getStringBeforeCharacther(auxUrl,'@'));
 
-        strcpy(auxUrl,auxUrl + strlen(url->user)+1);
+            printf("Please put the user password: \n");
+            fgets(url->password,256,stdin);
+            
+            aux = strchr(url->password,'\n');
+            *aux = '\0';
+            
+        }
+        else{
+            strcpy(url->user,getStringBeforeCharacther(auxUrl,':'));
 
-        strcpy(url->password,getStringBeforeCharacther(auxUrl,'@'));
+            strcpy(auxUrl,auxUrl + strlen(url->user)+1);
 
+            strcpy(url->password,getStringBeforeCharacther(auxUrl,'@'));
+        }
     }
     else{
         strcpy(urlPath,auxUrl);
@@ -89,7 +101,6 @@ int parseUrlInfo(urlInfo* url, char * urlGiven){
 
         if(urlPath[i] == '/'){
             index = i;
-            printf("%d\n",index);
             break;
         }    
     }
