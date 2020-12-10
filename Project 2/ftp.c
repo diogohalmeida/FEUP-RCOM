@@ -34,6 +34,8 @@ int ftpLoginIn(urlInfo* url, int fdSocket){
     sprintf(userCommand,"user %s\n",url->user);
     sprintf(passwordCommand,"pass %s\n",url->password);
 
+    printf("%s\n",url->user);
+
     if(writeCommandToSocket(fdSocket,userCommand) < 0){
         return -1;
     }
@@ -46,7 +48,7 @@ int ftpLoginIn(urlInfo* url, int fdSocket){
 
     sscanf(responseToUserCommand,"%d",&usernameCode);
 
-    if(usernameCode != 331){
+    if(usernameCode != 331 && usernameCode != 230){
         return -1;
     }
 
