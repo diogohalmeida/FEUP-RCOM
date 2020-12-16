@@ -36,13 +36,16 @@ int writeCommandToSocket(int fdSocket,char* command){
     return 0;
 }
 
-int readSocketResponse(int fdSocket,char* response){
+int readSocketResponse(int fdSocket,char * response){
     FILE* file = fdopen(fdSocket,"r");
 
-    if(fgets(response,1024,file) == NULL){
-        perror("Error reading response from socket!\n");
-        return -1;
-    }
+    do {
+		memset(response, 0, 1024);
+		response = fgets(response, 1024, file);
+		printf("%s", response);
+
+	} while (!('1' <= response[0] && response[0] <= '5') || response[3] != ' ');
+
 
     return 0;
 }

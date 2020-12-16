@@ -9,6 +9,6 @@ int ftpLoginIn(urlInfo* url, int fdSocket);
 
 int ftpPassiveMode(urlInfo* url, int fdSocket, int* dataSocket);
 
-int ftpRetrieveFile(urlInfo* url, int fdSocket);
+int ftpRetrieveFile(urlInfo* url, int fdSocket, int * fileSize);
 
-int ftpDownloadAndCreateFile(urlInfo* url, int fdDataSocket);
+int ftpDownloadAndCreateFile(urlInfo* url, int fdDataSocket, int fileSize);

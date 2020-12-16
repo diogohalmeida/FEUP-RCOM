@@ -11,6 +11,8 @@ int main(int argc, char** argv){
     urlInfo url;
     int fdSocket;
     int fdDataSocket;
+    int fileSize;
+    char response[1024];
 
     initializeUrlInfo(&url);
 
@@ -34,20 +36,27 @@ int main(int argc, char** argv){
         return -1;
     }
 
+
     if(ftpPassiveMode(&url,fdSocket,&fdDataSocket) < 0){
         printf("Error entering in passive mode!\n");
         return -1;
     }
 
-    if(ftpRetrieveFile(&url,fdSocket) < 0){
+
+    if(ftpRetrieveFile(&url,fdSocket,&fileSize) < 0){
         printf("Error retrieving file!\n");
         return -1;
     }
 
-    if(ftpDownloadAndCreateFile(&url,fdDataSocket) < 0){
+    if(ftpDownloadAndCreateFile(&url,fdDataSocket, fileSize) < 0){
         printf("Error downloading/creating file!\n");
         return -1;
     }
+
+
+    /*if(readSocketResponse(fdSocket,response) < 0){
+        return -1;
+    }*/
 
     close(fdSocket);
 

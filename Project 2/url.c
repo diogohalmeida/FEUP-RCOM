@@ -35,9 +35,6 @@ int getIpAddressFromHost(urlInfo* url){
 
     strcpy(url->ipAddress,inet_ntoa(*((struct in_addr *)h->h_addr)));
 
-    //printf("Host name  : %s\n", h->h_name);
-    //printf("IP Address : %s\n",inet_ntoa(*((struct in_addr *)h->h_addr)));
-
     return 0;
 }
 
