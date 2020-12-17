@@ -167,7 +167,7 @@ int ftpDownloadAndCreateFile(urlInfo* url, int fdDataSocket, int fileSize){
 
     printf("\n");
 
-    while ((bytesRead = read(fdDataSocket, buffer, 1))) {
+    while ((bytesRead = read(fdDataSocket, buffer, 1024))) {
 
 		if (bytesRead < 0) {
 			perror("read()\n");

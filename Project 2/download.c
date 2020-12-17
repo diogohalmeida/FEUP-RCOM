@@ -12,7 +12,6 @@ int main(int argc, char** argv){
     int fdSocket;
     int fdDataSocket;
     int fileSize;
-    char response[1024];
 
     initializeUrlInfo(&url);
 
